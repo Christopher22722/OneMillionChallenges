@@ -210,77 +210,73 @@ async function notifyAdmin(data){
       catch { return 'user'; }
     }
 
-   async function reserve(pixels){
-  // Lee el borrador y el texto del reto
+async function reserve(pixels){
+  // Lee datos locales
   let overlayDraft = null;
   try { overlayDraft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); } catch {}
   const challengeText = (document.getElementById('challengeText')?.value || '').trim();
 
-  // Un único POST al backend con { pixels, overlayDraft, challenge, role }
-  const r = await fetch('/api/reserve', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Role': currentRole()
-    },
-    body: JSON.stringify({
-      pixels,
-      overlayDraft,
-      challenge: challengeText,
-      role: currentRole()
-    })
-  });
+  // 1) Intento backend (por si lo montas más adelante)
+  try{
+    const r = await fetch('/api/reserve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': currentRole() },
+      body: JSON.stringify({ pixels, overlayDraft, challenge: challengeText, role: currentRole() })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data?.paypalOrderId) return data;      // ← si existe backend válido, úsalo
+    console.warn('Reserve backend not ok:', data);
+  }catch(e){
+    console.warn('Reserve backend failed:', e);
+  }
 
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || 'Failed to create reservation.');
-  if (!data?.paypalOrderId) throw new Error('Invalid server response (empty paypalOrderId).');
-  return data;
+  // 2) Fallback: modo solo-frontend (sin backend)
+  const cfg = window.APP_CONFIG || {};
+  const price = Number(cfg.PRICE_PER_PIXEL || 1);
+  const count = Array.isArray(pixels) ? pixels.length : 0;
+  const amount = Number((count * price).toFixed(2));
+  return { paypalOrderId: null, amount };              // ← devolvemos solo el monto
 }
 
 
- function renderPaypal(orderId, onSuccess, onError){
+function renderPaypal(orderOrAmount, onSuccess, onError){
   if(!(window.paypal && window.paypal.Buttons)){
     throw new Error('PayPal SDK no cargado');
   }
 
   window.paypal.Buttons({
-    createOrder: () => orderId,
+    // Si llega un orderId del servidor lo usamos; si no, creamos la orden aquí
+    createOrder: (data, actions) => {
+      if (orderOrAmount && typeof orderOrAmount === 'string' && orderOrAmount.length > 10) {
+        return orderOrAmount; // p.ej. PAYID-...
+      }
+      const value = Number(orderOrAmount || 0).toFixed(2);
+      return actions.order.create({
+        purchase_units: [{ amount: { value } }]
+      });
+    },
 
-    // 👇 IMPORTANTE: ahora recibimos también "actions"
     onApprove: async (dataPP, actions) => {
       try {
         let cap = null;
 
-        // 1) Intentar CAPTURA EN BACKEND
-        let res = null;
+        // 1) Intentar captura en backend (si existiera)
         try {
-          res = await fetch('/api/paypal/capture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId: dataPP.orderID,
-              paypalOrderId: dataPP.orderID
-            })
+          const res = await fetch('/api/paypal/capture', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ orderId: dataPP.orderID })
           });
-        } catch (_) { /* ignoramos para probar fallback */ }
-
-        if (res && res.ok) {
-          const body = await res.json().catch(() => ({}));
-          if (body && body.ok) {
-            cap = body; // ✅ captura hecha por el servidor
-          } else {
-            // backend respondió pero con error: probamos fallback cliente
-            console.warn('Server capture not ok, falling back to client capture:', body);
+          if (res.ok) {
+            const body = await res.json().catch(()=> ({}));
+            if (body && body.ok) cap = body;
           }
-        }
+        } catch(_) {}
 
-        // 2) FALLBACK: CAPTURA CLIENTE si no hay "cap"
+        // 2) Fallback: captura en cliente
         if (!cap) {
-          if (!actions || !actions.order || !actions.order.capture) {
-            throw new Error('Capture failed (no actions.order.capture available)');
-          }
-          const clientCap = await actions.order.capture(); // ✅ captura directa con SDK
-          // Normalizamos algunos campos útiles
+          if (!actions?.order?.capture) throw new Error('Capture failed (no actions.order.capture available)');
+          const clientCap = await actions.order.capture();
           cap = {
             ok: true,
             id: clientCap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || null,
@@ -290,42 +286,13 @@ async function notifyAdmin(data){
           };
         }
 
-        // 3) Confirmar overlay (id de orden o captura, lo que tengas)
-        try {
-          await fetch('/api/overlays/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify({ paypalOrderId: cap.orderId || cap.id || dataPP.orderID })
-          });
-        } catch (e) {
-          console.warn('Could not confirm overlay (backend may have already confirmed):', e);
-        }
-
-        // 4) Limpiar selección local y notificar éxito al caller
-        try {
-          localStorage.removeItem('selectedPixels');
-          localStorage.removeItem('overlayDraft');
-        } catch {}
-
         onSuccess && onSuccess(cap);
-
       } catch (e) {
-        // Mostrar el error real
-        const msg =
-          e?.details?.[0]?.issue ||
-          e?.message ||
-          'Payment processing error.';
-        onError && onError(new Error(msg));
+        onError && onError(e);
       }
     },
 
-    onError: (err) => {
-      const msg =
-        err?.details?.[0]?.issue ||
-        err?.message ||
-        'Payment processing error.';
-      onError && onError(new Error(msg));
-    }
+    onError: (err) => onError && onError(err)
   }).render('#paypal-button-container');
 }
 
