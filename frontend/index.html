@@ -575,9 +575,11 @@ setTimeout(()=>{ justOpenedMenu = false; }, 0);
     ctx.fillRect(0, 0, gridSize, gridSize);
 
     // 4) Estado selección
-    // 4) Estado selección
-    const clicked = new Set(), history = [], taken = new Set(); 
-    const ENDPOINT_READ = (window.APP_CONFIG && window.APP_CONFIG.ENDPOINT) || 'https://script.google.com/macros/s/AKfycbxQG8Wf5w1PLNm1u8BiOSOrARVmFrw7GurTpCjLSuw8mJDcqzF4hY6Z3jkt06wDh48b/exec';
+
+   const clicked = new Set(), history = [], taken = new Set();
+   const ENDPOINT = (window.APP_CONFIG && window.APP_CONFIG.ENDPOINT) || '';
+   const ENDPOINT_READ = ENDPOINT;
+
 
 async function loadTakenAndPaint(){
   try{
@@ -1155,6 +1157,81 @@ luckyBtn.addEventListener('click', () => {
     // Inicial
     updateCounter();
     loadOverlayFromStorage(); // muestra previsualización si ya existe
+
+
+  const loadedOverlays = [];
+
+  async function loadAndDrawOverlays(){
+    if (!ENDPOINT) return;
+    try{
+      const r = await fetch(ENDPOINT + '?action=overlays');
+      if (!r.ok) throw new Error('overlays request failed: '+r.status);
+      const data = await r.json();
+
+      const list = Array.isArray(data.overlays) ? data.overlays : [];
+      loadedOverlays.length = 0;
+      loadedOverlays.push(...list);
+
+      // 1) marcar como ocupados todos los ids de cada overlay
+      for (const ov of list){
+        const ids = Array.isArray(ov.pixelIds) ? ov.pixelIds : [];
+        for (const id of ids){ if (!taken.has(id)) taken.add(id); }
+      }
+
+      // 2) Dibujar
+      for (const ov of list){
+        const b = ov.box || {x:0,y:0,cols:1,rows:1};
+        const x = b.x, y = b.y, w = b.cols, h = b.rows;
+
+        if (ov.type === 'paint' && ov.color){
+          ctx.fillStyle = ov.color;
+          ctx.fillRect(x, y, w, h);
+        } else if (ov.type === 'image' && ov.image){
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = ()=> ctx.drawImage(img, x, y, w, h);
+          img.src = ov.image;
+        } else if (ov.type === 'link' && ov.link){
+          // dibuja un borde/indicador
+          ctx.strokeStyle = '#0066ff';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+        }
+      }
+
+    }catch(e){
+      console.warn('loadAndDrawOverlays error', e);
+    }
+  }
+
+  // Opcional: abrir link si se hace click sobre un overlay con link
+  function pointInBox(px, py, box){
+    return px >= box.x && px < box.x + box.cols && py >= box.y && py < box.y + box.rows;
+  }
+  canvas.addEventListener('click', (ev)=>{
+    try{
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const gx = Math.floor((ev.clientX - rect.left) * scaleX);
+      const gy = Math.floor((ev.clientY - rect.top)  * scaleY);
+
+      for (const ov of loadedOverlays){
+        if (ov.link && ov.box && pointInBox(gx, gy, ov.box)){
+          window.open(ov.link, '_blank');
+          ev.preventDefault();
+          ev.stopPropagation();
+          return;
+        }
+      }
+    }catch{}
+  }, true);
+
+  // Llamar ambas cargas: ocupados y overlays
+  (async ()=>{
+    await loadTakenAndPaint();   // ya la tienes (marca en oscuro)  :contentReference[oaicite:2]{index=2}
+    await loadAndDrawOverlays(); // pinta color/imagen/link
+  })();
 
   </script>
 <!-- Modal: Dare Me -->
