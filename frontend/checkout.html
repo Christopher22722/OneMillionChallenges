@@ -109,6 +109,8 @@
       </div>
     </div>
 
+    <script src="config.js"></script>
+
   <script>
     // === Utilidades ===
     const $ = (id) => document.getElementById(id);
@@ -160,10 +162,19 @@
     }
 
     async function loadConfig(){
-      const r = await fetch('/api/config');
-      if(!r.ok) throw new Error('Failed to fetch configuration');
-      return r.json();
-    }
+  if (window.APP_CONFIG) {
+    return {
+      currency: window.APP_CONFIG.CURRENCY || 'USD',
+      pricePerPixel: Number(window.APP_CONFIG.PRICE_PER_PIXEL || 1),
+      paypalClientId: window.APP_CONFIG.PAYPAL_CLIENT_ID || ''
+    };
+  }
+  // Fallback: solo si más adelante montas un backend con /api/config
+  const r = await fetch('/api/config');
+  if(!r.ok) throw new Error('Failed to fetch configuration');
+  return r.json();
+}
+
 
     function loadPaypalSDK(clientId, currency){
       return new Promise((resolve, reject) => {
