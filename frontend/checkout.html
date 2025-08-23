@@ -354,7 +354,7 @@ $('total').textContent = money(amt, cfg.currency);
         } catch{}
 
 renderPaypal(
-  data.paypalOrderId,
+  data.paypalOrderId || Number(data.amount || 0),
   async () => { // onSuccess
     setOK('Payment completed! Your pixels are yours.');
 
