@@ -353,46 +353,106 @@ $('total').textContent = money(amt, cfg.currency);
           localStorage.setItem('challengeText', chText);
         } catch{}
 
-renderPaypal(
-  data.paypalOrderId || Number(data.amount || 0),
-  async () => { // onSuccess
-    setOK('Payment completed! Your pixels are yours.');
+  // data viene de reserve(...) o de tu cálculo de monto
+  const orderOrAmount = data?.paypalOrderId || Number(data?.amount || 0);
 
-    // dentro de onSuccess:
-try {
-  const chText = (document.getElementById('challengeText')?.value || '').trim();
+  renderPaypal(
+    orderOrAmount,
 
-  await notifyAdmin({
-    // === nombre de claves EXACTO que tu Apps Script usa en el email ===
-    count: selectedCount,                   // Pixels
-    currency: cfg.currency || 'USD',        // Currency
-    orderId: data.paypalOrderId,            // Order
-    challenge: chText,                      // Message/Dare
-    overlayDraft: { link: linkForEmail || '' } // Link
-  });
-} catch (e) {
-  console.warn('Notify success failed:', e);
-}
+    // onSuccess (pago capturado)
+    async (cap) => {
+      const cfg = window.APP_CONFIG || {};
 
-    // setTimeout(() => window.close(), 800);
-  },
-  async (err) => { // onError
-    console.error(err);
-    setError(err?.message || 'Payment processing error.');
-    try {
-      await notifyAdmin({
-        type: 'payment_error',
-        error: String(err?.message || err),
-        order: data?.paypalOrderId || null,     // usa "order" porque es la clave que lees en el correo
-        paypalOrderId: data?.paypalOrderId || null,
-        role: currentRole()
-      });
-    } catch (e2) {
-      console.warn('Notify error failed:', e2);
+      // 1) IDs de píxeles seleccionados
+      let ids = [];
+      try { ids = JSON.parse(localStorage.getItem('selectedPixels') || '[]'); } catch {}
+      if (!ids.length && typeof getSelectedIds === 'function') { ids = getSelectedIds(); }
+      const selectedCount = ids.length;
+
+      // 2) Overlay elegido por el usuario
+      let overlayDraft = null;
+      try { overlayDraft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); } catch {}
+      const linkForEmail   = (overlayDraft && overlayDraft.link) || localStorage.getItem('link') || '';
+      const challengeText  = (document.getElementById('challengeText')?.value || localStorage.getItem('challengeText') || '').trim();
+
+      // 3) Monto (defensivo, mínimo 0.01)
+      const amount = Math.max(0.01, Number((selectedCount * Number(cfg.PRICE_PER_PIXEL || 0)).toFixed(2)));
+
+      // 4) Datos del pago
+      const orderId = (
+        cap?.id ||
+        cap?.orderId ||
+        cap?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
+        data?.paypalOrderId || ''
+      );
+      const payerEmail = cap?.payer?.email_address || '';
+
+      // 5) Guardar compra en Apps Script (Google Sheets)
+      try {
+        await fetch((cfg.ENDPOINT || '') + '?action=purchase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, // evita preflight
+          body: JSON.stringify({
+            pixels: ids,
+            amount,
+            currency: cfg.CURRENCY || 'USD',
+            orderId,
+            email: payerEmail,
+            overlayDraft,
+            challenge: challengeText,
+            link: linkForEmail
+          }),
+          keepalive: true
+        });
+      } catch (e) {
+        console.warn('purchase POST failed:', e);
+      }
+
+      // 6) Notificación por correo (opcional)
+      try {
+        if (typeof notifyAdmin === 'function') {
+          await notifyAdmin({
+            // Claves esperadas por tu correo
+            count:    selectedCount,                // Pixels
+            currency: cfg.CURRENCY || 'USD',        // Currency
+            orderId:  orderId,                      // Order
+            challenge: challengeText,               // Message/Dare
+            overlayDraft: { link: linkForEmail }    // Link
+          });
+        }
+      } catch (e) {
+        console.warn('Notify success failed:', e);
+      }
+
+      // 7) Limpieza local y OK UI
+      try {
+        localStorage.removeItem('selectedPixels');
+        localStorage.removeItem('overlayDraft');
+        // localStorage.removeItem('challengeText'); localStorage.removeItem('link'); // si quieres
+      } catch {}
+      setOK('Payment completed! Your pixels are yours.');
+      // location.href = '/'; // opcional: volver al lienzo
+    },
+
+    // onError (fallo en pago)
+    async (err) => {
+      console.error(err);
+      setError(err?.message || 'Payment processing error.');
+      try {
+        if (typeof notifyAdmin === 'function') {
+          await notifyAdmin({
+            type: 'payment_error',
+            error: String(err?.message || err),
+            order: data?.paypalOrderId || null,   // clave que lees en el correo
+            paypalOrderId: data?.paypalOrderId || null,
+            role: (typeof currentRole === 'function' ? currentRole() : undefined)
+          });
+        }
+      } catch (e2) {
+        console.warn('Notify error failed:', e2);
+      }
     }
-  }
-);
-
+  );
 
       }catch(e){
         setError(e.message);
