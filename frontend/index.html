@@ -576,7 +576,41 @@ setTimeout(()=>{ justOpenedMenu = false; }, 0);
 
     // 4) Estado selección
     // 4) Estado selección
-    const clicked = new Set(), history = [], taken = new Set(); // taken = comprados/ocupados (cárgalos del backend)
+    const clicked = new Set(), history = [], taken = new Set(); 
+    const ENDPOINT_READ = (window.APP_CONFIG && window.APP_CONFIG.ENDPOINT) || 'https://script.google.com/macros/s/AKfycbxQG8Wf5w1PLNm1u8BiOSOrARVmFrw7GurTpCjLSuw8mJDcqzF4hY6Z3jkt06wDh48b/exec';
+
+async function loadTakenAndPaint(){
+  try{
+    const res  = await fetch(ENDPOINT_READ + '?action=grid', { method:'GET' });
+    if(!res.ok) throw new Error('grid request failed: ' + res.status);
+    const data = await res.json();
+    const ids  = Array.isArray(data.occupied) ? data.occupied : [];
+
+    // Añadir al Set de ocupados y pintar cada celda
+    ctx.save();
+    ctx.fillStyle = '#222'; // color para ocupados en el lienzo
+    for (const raw of ids){
+      const id = Number(raw);
+      if (!Number.isFinite(id)) continue;
+      if (!taken.has(id)) taken.add(id);
+      const y = Math.floor(id / gridSize);
+      const x = id % gridSize;
+      ctx.fillRect(x, y, 1, 1); // pinta el pixel en el canvas
+    }
+    ctx.restore();
+
+    // (opcional) Si quieres actualizar algún contador global, hazlo aquí
+    // updateCounter(); // este contador muestra seleccionados, no vendidos
+
+  }catch(err){
+    console.warn('loadTakenAndPaint error:', err);
+  }
+}
+
+// Lanza la carga cuando el DOM esté listo (variables ya existen)
+document.addEventListener('DOMContentLoaded', loadTakenAndPaint);
+</script>
+// taken = comprados/ocupados (cárgalos del backend)
     let isDragging = false, dragStart = null, dragLast = null;
     let suppressDrag = false;
 
