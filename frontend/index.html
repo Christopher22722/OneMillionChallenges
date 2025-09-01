@@ -377,7 +377,7 @@
   <!-- Modales (igual que los tuyos; omito por brevedad) -->
 
   <script>
-             const gridSize   = 1000,
+    const gridSize   = 1000,
       total      = gridSize * gridSize,
       canvas     = document.getElementById('gridCanvas'),
       ctx        = canvas.getContext('2d'),
@@ -392,7 +392,7 @@
       paintSound = document.getElementById('paintSound'),
       paymentBtn = document.getElementById('paymentBtn'),
       editBtn    = document.getElementById('editBtn'),
-      luckyBtn   = document.getElementById('luckyBtn');
+      luckyBtn   = document.getElementById('luckyBtn'),
       rulesBtn   = document.getElementById('rulesBtn');
 
       // ====== Interacción con el overlay (abrir link / media) ======
@@ -579,35 +579,71 @@ setTimeout(()=>{ justOpenedMenu = false; }, 0);
    const clicked = new Set(), history = [], taken = new Set();
    const ENDPOINT = (window.APP_CONFIG && window.APP_CONFIG.ENDPOINT) || '';
    const ENDPOINT_READ = ENDPOINT;
+   const linksById = new Map(); // idPixel -> link
+
 
 
 async function loadTakenAndPaint(){
   try{
-    const res  = await fetch(ENDPOINT_READ + '?action=grid', { method:'GET' });
+    if (!ENDPOINT_READ) {
+      console.warn('No ENDPOINT configured in APP_CONFIG.ENDPOINT');
+      return;
+    }
+    // evita caché del navegador
+    const res  = await fetch(`${ENDPOINT_READ}?action=grid&t=${Date.now()}`, { cache:'no-store' });
     if(!res.ok) throw new Error('grid request failed: ' + res.status);
     const data = await res.json();
-    const ids  = Array.isArray(data.occupied) ? data.occupied : [];
 
-    // Añadir al Set de ocupados y pintar cada celda
+    // Soporta ambos nombres de campo: occupiedIds (nuevo) u occupied (viejo)
+    const ids  = Array.isArray(data.occupiedIds) ? data.occupiedIds
+              : Array.isArray(data.occupied)    ? data.occupied
+              : [];
+
+    // Limpia cualquier estado previo de links y ocupados
+    linksById.clear();
+
+    // Pinta ocupados base en gris oscuro
     ctx.save();
-    ctx.fillStyle = '#222'; // color para ocupados en el lienzo
+    ctx.fillStyle = '#222';
     for (const raw of ids){
       const id = Number(raw);
       if (!Number.isFinite(id)) continue;
       if (!taken.has(id)) taken.add(id);
       const y = Math.floor(id / gridSize);
       const x = id % gridSize;
-      ctx.fillRect(x, y, 1, 1); // pinta el pixel en el canvas
+      ctx.fillRect(x, y, 1, 1);
     }
     ctx.restore();
 
-    // (opcional) Si quieres actualizar algún contador global, hazlo aquí
-    // updateCounter(); // este contador muestra seleccionados, no vendidos
+    // Overlays por-pixel desde backend (color y/o link)
+    // data.overlays: [{ id, color, imgUrl, link }]
+    const overlays = Array.isArray(data.overlays) ? data.overlays : [];
+    for (const ov of overlays){
+      const id = Number(ov.id);
+      if (!Number.isFinite(id)) continue;
+      const y = Math.floor(id / gridSize);
+      const x = id % gridSize;
+
+      // si trae color: píntalo 1×1
+      if (ov.color){
+        ctx.fillStyle = ov.color;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      // guarda link para click
+      if (ov.link){
+        linksById.set(id, ov.link);
+      }
+      // (si en el futuro agregas box, imagen, etc., aquí puedes extender)
+    }
+
+    // (Opcional) actualizar algún contador global aquí
+    // updateCounter();
 
   }catch(err){
     console.warn('loadTakenAndPaint error:', err);
   }
 }
+
 
 // Lanza la carga cuando el DOM esté listo (variables ya existen)
 document.addEventListener('DOMContentLoaded', loadTakenAndPaint);
@@ -831,7 +867,7 @@ function pickRandomAvailable(count){
   for (let yy = y0; yy <= y1; yy++) {
     for (let xx = x0; xx <= x1; xx++) {
       const id = yy * gridSize + xx;
-      if (!clicked.has(id)) {
+      if (!clicked.has(id) && !taken.has(id)) {
         clicked.add(id);
         newIds.push(id);
         ctx.fillRect(xx, yy, 1, 1);
@@ -864,6 +900,16 @@ function pickRandomAvailable(count){
       // Si no hay overlay interactivo, proceder a pintar 1 celda
       const { x, y } = cell;
       const id = y * gridSize + x;
+      // Si el pixel ya está comprado y tiene link en backend, ábrelo
+
+// Si el pixel ya está comprado, no pintar. Si además tiene link, ábrelo.
+if (taken.has(id)) {
+  if (linksById.has(id)) {
+    window.open(linksById.get(id), '_blank', 'noopener');
+  }
+  return;
+}
+
       if (!clicked.has(id)) {
         clicked.add(id);
         ctx.fillStyle = 'blue';
@@ -1158,51 +1204,6 @@ luckyBtn.addEventListener('click', () => {
     updateCounter();
     loadOverlayFromStorage(); // muestra previsualización si ya existe
 
-
-  const loadedOverlays = [];
-
-  async function loadAndDrawOverlays(){
-    if (!ENDPOINT) return;
-    try{
-      const r = await fetch(ENDPOINT + '?action=overlays');
-      if (!r.ok) throw new Error('overlays request failed: '+r.status);
-      const data = await r.json();
-
-      const list = Array.isArray(data.overlays) ? data.overlays : [];
-      loadedOverlays.length = 0;
-      loadedOverlays.push(...list);
-
-      // 1) marcar como ocupados todos los ids de cada overlay
-      for (const ov of list){
-        const ids = Array.isArray(ov.pixelIds) ? ov.pixelIds : [];
-        for (const id of ids){ if (!taken.has(id)) taken.add(id); }
-      }
-
-      // 2) Dibujar
-      for (const ov of list){
-        const b = ov.box || {x:0,y:0,cols:1,rows:1};
-        const x = b.x, y = b.y, w = b.cols, h = b.rows;
-
-        if (ov.type === 'paint' && ov.color){
-          ctx.fillStyle = ov.color;
-          ctx.fillRect(x, y, w, h);
-        } else if (ov.type === 'image' && ov.image){
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = ()=> ctx.drawImage(img, x, y, w, h);
-          img.src = ov.image;
-        } else if (ov.type === 'link' && ov.link){
-          // dibuja un borde/indicador
-          ctx.strokeStyle = '#0066ff';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
-        }
-      }
-
-    }catch(e){
-      console.warn('loadAndDrawOverlays error', e);
-    }
-  }
 
   // Opcional: abrir link si se hace click sobre un overlay con link
   function pointInBox(px, py, box){
