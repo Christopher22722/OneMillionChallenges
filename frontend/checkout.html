@@ -413,7 +413,7 @@ async (cap) => {
         pixels: ids,
         overlayDraft: {
           color: overlayDraft?.color || '',
-          imgUrl: overlayDraft?.imageUrl || overlayDraft?.imgUrl || '',
+          imgUrl: overlayDraft?.dataURL || overlayDraft?.url || overlayDraft?.imageUrl || overlayDraft?.imgUrl || '',
           link: linkForEmail
         },
         link: linkForEmail,
