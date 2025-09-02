@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Editor de contenido | ONE MILLION CHALLENGES</title>
+  <style>
+    :root { --bg:#0b0b0c; --card:#16171a; --text:#eaecef; --muted:#9aa3ab; --border:#2a2e34; --accent:#2ea44f; }
+    *{ box-sizing:border-box }
+    html,body{ margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,Segoe UI,Roboto,Arial,sans-serif }
+    .wrap{ max-width:720px; margin:20px auto; padding:16px }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px }
+    h1{ font-size:20px; margin:0 0 10px }
+    .row{ display:flex; gap:10px; align-items:center; margin:10px 0; flex-wrap:wrap }
+    .pill{ background:#1f2227; border:1px solid var(--border); border-radius:999px; padding:6px 10px; color:var(--muted) }
+    input[type="text"]{ flex:1; min-width:240px; padding:8px; border-radius:10px; border:1px solid var(--border); background:#0f1115; color:#eaecef }
+    input[type="color"]{ height:36px; width:54px; background:transparent; border:none }
+    .btn{ padding:9px 12px; border-radius:10px; border:1px solid var(--border); background:#1a1d25; color:#eaecef; cursor:pointer }
+    .btn:hover{ border-color:#3a3f4d }
+    .btn-primary{ background:var(--accent); border-color:var(--accent); color:#08120b; font-weight:700 }
+    .preview{ border:1px dashed #3a3f4d; border-radius:10px; padding:10px; min-height:150px; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#0f1115 }
+    .preview img, .preview video{ max-width:100%; max-height:320px; display:block }
+    .small{ font-size:12px; color:var(--muted) }
+    .err{ background:#311016; border:1px solid #4e1a24; color:#ffb3c0; padding:10px 12px; border-radius:10px; margin:10px 0; display:none }
+    .ok{ background:#0f2a19; border:1px solid #1f5a36; color:#b3ffd1; padding:10px 12px; border-radius:10px; margin:10px 0; display:none }
+    .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Content editor for the selected block</h1>
+      <div id="err" class="err"></div>
+      <div class="row small">
+        <span class="pill">Cells: <b id="cells">—</b></span>
+        <span class="pill">Dimensions: <b id="dims">—</b></span>
+        <span class="pill">Start position: <b id="origin">—</b></span>
+
+      </div>
+
+      <div class="row">
+  <label class="btn" for="imgInput">Upload image</label>
+  <input id="imgInput" type="file" accept="image/*" hidden />
+
+  <!-- VIDEO: oculto por defecto, solo admin lo ve/usa -->
+  <label class="btn hidden" for="vidInput">Upload video</label>
+  <input id="vidInput" type="file" accept="video/mp4,video/webm" hidden disabled />
+</div>
+
+
+      <div class="row">
+        <input id="linkInput" type="text" placeholder="Paste a link (https://...)" />
+        <button id="placeLink" class="btn">Use link</button>
+      </div>
+      <div class="row">
+        <input id="colorInput" type="color" value="#34d399" />
+        <button id="placeColor" class="btn">Fill color</button>
+      </div>
+
+      <div id="preview" class="preview small">No content yet</div>
+
+      <div class="row">
+        <button id="saveDraft" class="btn-primary">Save draft</button>
+        <button id="clearDraft" class="btn">Clean</button>
+        <button id="closeWin" class="btn">Close</button>
+      </div>
+
+      <div id="ok" class="ok">Draft saved. Complete payment in Checkout to confirm.</div>
+      <div class="small">This draft will be finalized after payment in Checkout.</div>
+    </div>
+  </div>
+   <script src="config.js?v=2025-09-01-006"></script>
+
+  <script>
+    const gridSize = 1000;
+    const $ = (id)=>document.getElementById(id);
+    const errEl = $('err'), okEl = $('ok'), preview = $('preview');
+
+    function setErr(m){ errEl.textContent=m; errEl.style.display='block'; }
+    function clrErr(){ errEl.style.display='none'; }
+    function setOK(m){ okEl.textContent=m; okEl.style.display='block'; }
+    // --- Admin gate (front-only) ---
+    // --- Admin gate (front-only) ---
+const ADMIN_FLAG_KEY = 'o1m_isAdmin';
+const ADMIN_CODE = '22722'; // pon aquí tu código secreto
+
+function isAdmin(){
+  try { return localStorage.getItem(ADMIN_FLAG_KEY) === '1'; } catch { return false; }
+}
+function setAdmin(on){
+  try { localStorage.setItem(ADMIN_FLAG_KEY, on ? '1' : '0'); } catch {}
+}
+function ensureAdminUI(){
+  const videoLabel = document.querySelector('label[for="vidInput"]');
+  const vidInputEl = document.getElementById('vidInput');
+  const admin = isAdmin();
+  if (videoLabel) videoLabel.classList.toggle('hidden', !admin);
+  if (vidInputEl){ vidInputEl.classList.toggle('hidden', !admin); vidInputEl.disabled = !admin; }
+}
+
+// Desbloquear: ?admin=1&code=ADMIN_CODE  |  Bloquear: ?admin=0
+(function adminBootstrap(){
+  const p = new URLSearchParams(location.search);
+  if (p.get('admin') === '1' && p.get('code') === ADMIN_CODE){
+    setAdmin(true);
+  } else {
+    // En cualquier otro caso (sin params o admin=0): APAGADO
+    setAdmin(false);
+  }
+  ensureAdminUI();
+  // Atajos: Ctrl+Alt+A (encender), Ctrl+Alt+X (apagar)
+  document.addEventListener('keydown', (e)=>{
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && e.altKey && k === 'a'){
+      const code = prompt('Admin code:');
+      if (code === ADMIN_CODE){ setAdmin(true); ensureAdminUI(); alert('Admin habilitado'); }
+      else { alert('Código incorrecto'); }
+    }
+    if (e.ctrlKey && e.altKey && k === 'x'){
+      setAdmin(false); ensureAdminUI(); alert('Admin desactivado');
+    }
+  });
+})();
+
+    function getSelectedIds(){
+      try{
+        const raw = localStorage.getItem('selectedPixels') || '[]';
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? Array.from(new Set(arr.map(n=>Number(n)).filter(Number.isInteger))) : [];
+      }catch{ return []; }
+    }
+    function idsToBox(ids){
+      if(!ids.length) return null;
+      let minX=Infinity,minY=Infinity,maxX=-1,maxY=-1;
+      for(const id of ids){
+        const x = id % gridSize, y = Math.floor(id / gridSize);
+        if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y;
+      }
+      return { x:minX, y:minY, cols:maxX-minX+1, rows:maxY-minY+1 };
+    }
+
+    const selected = getSelectedIds();
+    const box = idsToBox(selected);
+    if(!selected.length || !box){
+      setErr('No selection. Go back to the canvas and select a block.');
+    }else{
+      $('cells').textContent = String(selected.length);
+      $('dims').textContent  = `${box.cols}×${box.rows}`;
+      $('origin').textContent= `(${box.x}, ${box.y})`;
+    }
+
+        let draft = { type:null, color:null, url:null, dataURL:null, link:null, box };
+
+    function showPreview(){
+      preview.innerHTML=''; preview.classList.remove('small');
+      if(!draft.type){ preview.textContent='No content yet'; preview.classList.add('small'); return; }
+      if(draft.type==='color'){
+        const sw=document.createElement('div'); sw.style.width='100%'; sw.style.height='160px'; sw.style.background=draft.color||'#34d399'; preview.appendChild(sw);
+      }else if(draft.type==='image'){
+        const img=new Image(); img.src = draft.dataURL || draft.url; img.style.maxWidth='100%'; img.style.maxHeight='320px'; preview.appendChild(img);
+      }else if(draft.type==='video'){
+        const v=document.createElement('video'); v.controls=true; v.loop=true; v.autoplay=false; v.muted=true; v.src=draft.dataURL||draft.url; preview.appendChild(v);
+      }else if(draft.type==='link'){
+        const a=document.createElement('a'); a.href=draft.url; a.target='_blank'; a.rel='noopener noreferrer'; a.textContent=draft.url; preview.appendChild(a);
+      }
+            // Si hay enlace adicional, muéstralo debajo del contenido
+      if(draft.link){
+        const wrap=document.createElement('div'); wrap.style.marginTop='8px';
+        const a=document.createElement('a'); a.href=draft.link; a.target='_blank'; a.rel='noopener noreferrer'; a.textContent=draft.link;
+        wrap.appendChild(a); preview.appendChild(wrap);
+      }
+    }
+    // Comprime un dataURL de imagen a JPG y redimensiona si es necesario
+    function compressImageDataURL(dataURL, maxW=1920, maxH=1920, quality=0.92){
+      return new Promise((resolve)=>{
+        try{
+          const img = new Image();
+          img.onload = ()=>{
+            let { width:w, height:h } = img;
+            const r = Math.min(maxW / w, maxH / h, 1);
+            const nw = Math.round(w * r), nh = Math.round(h * r);
+            const c = document.createElement('canvas');
+            c.width = nw; c.height = nh;
+            const cx = c.getContext('2d');
+            cx.imageSmoothingEnabled = true;
+            cx.imageSmoothingQuality = 'high';
+            cx.drawImage(img, 0, 0, nw, nh);
+            try {
+           let out = c.toDataURL('image/webp', quality);
+           if (!out || out.length < 10) out = c.toDataURL('image/jpeg', quality);
+           resolve(out || dataURL);
+           } catch(e){
+           resolve(dataURL);
+           }
+          };
+          img.onerror = ()=>resolve(dataURL);
+          img.src = dataURL;
+        }catch{ resolve(dataURL); }
+      });
+    }
+        // Captura un frame del video y lo devuelve como dataURL (WebP/JPEG)
+    function captureVideoFrame(url, at=0.2, maxW=1280, maxH=1280){
+      return new Promise((resolve)=>{
+        try{
+          const v = document.createElement('video');
+          v.preload = 'metadata'; v.muted = true; v.playsInline = true; v.src = url;
+          v.onloadedmetadata = ()=>{
+            const dur = v.duration || 1;
+            const t = Math.min(Math.max(at, 0.05), Math.max(0.05, dur - 0.05));
+            v.currentTime = t;
+          };
+          v.onseeked = ()=>{
+            const w = v.videoWidth || 1, h = v.videoHeight || 1;
+            const r = Math.min(maxW / w, maxH / h, 1);
+            const cw = Math.round(w*r), ch = Math.round(h*r);
+            const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+            const cx = c.getContext('2d');
+            cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+            cx.drawImage(v, 0, 0, cw, ch);
+            let out = null;
+            try { out = c.toDataURL('image/webp', 0.9); if(!out || out.length<10) out = c.toDataURL('image/jpeg', 0.9); } catch{}
+            resolve(out || null);
+          };
+          v.onerror = ()=>resolve(null);
+        }catch{ resolve(null); }
+      });
+    }
+    // === IndexedDB para blobs grandes (video/imagen) ===
+    const IDB_NAME = 'o1mDrafts', IDB_STORE = 'drafts';
+    function idbOpen(){
+      return new Promise((res, rej)=>{
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e)=>{ e.target.result.createObjectStore(IDB_STORE, { keyPath:'id' }); };
+        req.onsuccess = ()=>res(req.result);
+        req.onerror = ()=>rej(req.error);
+      });
+    }
+    async function idbPutBlob(id, blob, type){
+      const db = await idbOpen();
+      return new Promise((res, rej)=>{
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put({ id, blob, type: type || blob.type || '' });
+        tx.oncomplete = ()=>{ db.close(); res(); };
+        tx.onerror = ()=>{ const err=tx.error; db.close(); rej(err); };
+      });
+    }
+    async function idbGetBlob(id){
+      const db = await idbOpen();
+      return new Promise((res, rej)=>{
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const q = tx.objectStore(IDB_STORE).get(id);
+        q.onsuccess = ()=>{ const r=q.result; db.close(); res(r && r.blob ? r : null); };
+        q.onerror = ()=>{ const err=q.error; db.close(); rej(err); };
+      });
+    }
+    async function idbDelBlob(id){
+      const db = await idbOpen();
+      return new Promise((res, rej)=>{
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(id);
+        tx.oncomplete = ()=>{ db.close(); res(); };
+        tx.onerror = ()=>{ const err=tx.error; db.close(); rej(err); };
+      });
+    }
+    const imgInputEl = $('imgInput');
+      if (imgInputEl) imgInputEl.addEventListener('change', e=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const r=new FileReader(); r.onload=ev=>{ draft={type:'image', dataURL:ev.target.result, url:null, color:null, box}; showPreview(); };
+      r.readAsDataURL(f); e.target.value='';
+    });
+        document.getElementById('vidInput').addEventListener('change', async (e)=>{
+                if (!isAdmin()) {
+        setErr('Only the administrator can upload videos.');
+        e.target.value = '';
+        return;
+      }
+      const f = e.target.files?.[0]; if(!f) return;
+
+      // Acepta archivos grandes; pon un tope razonable local (p.ej. 200 MB)
+      if (f.size > 200 * 1024 * 1024) return setErr('Video is too large (limited to ~200MB for the local draft).');
+
+      const key = 'ovl-video-' + Date.now();
+      try{
+        await idbPutBlob(key, f, f.type || 'video/mp4');
+        // Guardamos solo la referencia
+        draft = { type:'video', url:null, dataURL:null, link:draft.link||null, color:null, box, blobKey:key };
+
+        // Preview local (temporal) sin llenar memoria del borrador
+                const tmp = URL.createObjectURL(f);
+
+        // Miniatura (frame del video) para mostrar en el lienzo
+        try{
+          const thumb = await captureVideoFrame(tmp, 0.2, 640, 640);
+          if (thumb) draft.thumbnail = thumb;
+        }catch{}
+
+        // Preview en el editor
+        preview.innerHTML = '';
+        const v = document.createElement('video');
+        v.controls = true; v.playsInline = true; v.preload = 'metadata'; v.muted = true; v.src = tmp;
+        preview.appendChild(v);
+      }catch(err){
+        console.error(err);
+        return setErr('Could not save the video locally (IndexedDB).');
+      }
+      e.target.value = '';
+    });
+
+        $('placeLink').addEventListener('click', ()=>{
+      const url = $('linkInput').value.trim();
+      if(!/^https?:\/\//i.test(url)) return setErr('Enter a valid link (http/https).');
+      clrErr();
+      if(!draft.type){
+        // Si no hay nada, modo solo link
+        draft={type:'link', url, dataURL:null, color:null, link:url, box};
+      }else{
+        // Si ya hay imagen/video/color, guarda el link aparte
+        draft.link = url;
+      }
+      showPreview();
+    });
+    $('placeColor').addEventListener('click', ()=>{
+      draft={type:'color', color:$('colorInput').value, url:null, dataURL:null, box}; showPreview();
+    });
+
+        document.getElementById('saveDraft').addEventListener('click', async ()=>{
+                if (draft.type === 'video' && !isAdmin()) {
+        return setErr('Solo el administrador puede guardar contenido de video.');
+      }
+      if(!draft.type) return setErr('Select some content (image/video/link/color).');
+                  try{
+        // Comprime imagen si es grande (el video ya no va en JSON)
+        if (draft.type === 'image' && draft.dataURL && draft.dataURL.length > 2_800_000) {
+          draft.dataURL = await compressImageDataURL(draft.dataURL, 1920, 1920, 0.92);
+        }
+
+        // Video: nunca guardes dataURL en localStorage
+        if (draft.type === 'video') { draft.dataURL = null; }
+
+        const payload = { ...draft, selectedIds: selected };
+        const s = JSON.stringify(payload);
+
+        // Con el video fuera del JSON, 4.8MB es seguro bajo el límite real ~5MB
+        if (s.length > 4_800_000) {
+          return setErr('Draft too large for localStorage (~5MB). Reduce image or area.');
+        }
+
+        localStorage.setItem('overlayDraft', s);
+        try{ window.opener && window.opener.postMessage({ type:'overlayDraftSaved' }, '*'); }catch{}
+        clrErr(); setOK('Draft saved. Now complete payment in Checkout to confirm.');
+      }catch(e){
+        console.error(e);
+        setErr('Could not save the draft.');
+      }
+      });  
+      
+    $('clearDraft').addEventListener('click', async ()=>{
+            if (draft && draft.blobKey) { try{ await idbDelBlob(draft.blobKey); }catch{} }
+      localStorage.removeItem('overlayDraft');
+      try{ window.opener && window.opener.postMessage({ type:'overlayDraftCleared' }, '*'); }catch{}
+      draft={ type:null, color:null, url:null, dataURL:null, link:null, box }; showPreview(); clrErr(); okEl.style.display='none';
+      });
+
+    $('closeWin').addEventListener('click', ()=>window.close());
+
+    (function loadPrev(){
+      try{ const prev=JSON.parse(localStorage.getItem('overlayDraft')||'null'); if(prev && prev.box){ draft=prev; showPreview(); } }catch{}
+      if(!draft.link && draft.type==='link' && draft.url){ draft.link = draft.url; }
+
+    })();
+  </script>
+</body>
+</html>
