@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Checkout | ONE MILLION CHALLENGES</title>
+  <style>
+    :root { --bg:#0b0b0c; --card:#16171a; --text:#eaecef; --muted:#9aa3ab; --accent:#2ea44f; }
+    *{ box-sizing: border-box; }
+
+    /* 🔧 Corrección: permitir altura dinámica y scroll vertical */
+    html, body { margin: 0; height: 100%; }
+
+
+    /* 🔧 Quitar el layout flex centrado que recortaba el contenido */
+    body{
+      display:block;
+      background:var(--bg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      color:var(--text);
+      
+    }
+
+    .wrap{ width:100%; max-width:560px; padding:20px; margin:24px auto; }
+    .card{
+      background:var(--card); border:1px solid #22252a; border-radius:16px; padding:20px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    h1{ font-size:20px; margin:0 0 10px; }
+    .meta{ display:flex; gap:16px; flex-wrap:wrap; margin:8px 0 16px; }
+    .pill{ background:#1f2227; border:1px solid #2a2e34; border-radius:999px; padding:8px 12px; color:var(--muted); }
+    .total{ font-size:28px; font-weight:700; margin:6px 0 14px; }
+    #paypal-button-container{ margin-top:12px; }
+    .note{ font-size:12px; color:var(--muted); margin-top:10px; }
+    .err{ background:#311016; border:1px solid #4e1a24; color:#ffb3c0; padding:10px 12px; border-radius:10px; margin-bottom:12px; display:none; }
+    .ok{ background:#0f2a19; border:1px solid #1f5a36; color:#b3ffd1; padding:10px 12px; border-radius:10px; margin-top:12px; display:none; }
+    .actions{ display:flex; gap:10px; margin-top:12px; }
+    button.secondary{
+      background:transparent; color:var(--muted); border:1px solid #2a2e34; padding:10px 12px; border-radius:10px; cursor:pointer;
+    }
+    .loading{ opacity:.65; pointer-events:none; }
+        .challenge{ margin-top:12px; }
+    .challenge label{ display:block; margin-bottom:6px; font-weight:600; }
+
+    .challenge textarea{
+  width:100%; min-height:120px; resize:vertical;
+  border-radius:12px; 
+  border:2px solid #0fc919;             /* más grueso */
+  background:#0b0d12;                   /* un poco más claro para contraste */
+  color:#eaecef; 
+  padding:12px 14px;
+  box-shadow: 0 0 0 0 rgba(2, 245, 71, 0);/* glow apagado por defecto */
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.challenge textarea:hover{
+  border-color:#0fc919;                 /* resalta al pasar el mouse */
+}
+.challenge textarea:focus{
+  outline:none;
+  border-color:#0fc919;                /* borde verde al foco */
+  box-shadow: 0 0 0 3px rgba(46,164,79,.35), 0 8px 24px rgba(0,0,0,.35);
+  background:#0e1218;
+}
+.challenge textarea::placeholder{
+  color:#a7b0ba;                         /* placeholder un poco más visible */
+  opacity:.95;
+}
+.challenge .label-badge{
+  display:inline-block; margin-left:8px; padding:3px 8px;
+  border-radius:999px; font-size:12px; font-weight:700;
+  background:linear-gradient(90deg,#2ea44f,#25d366); color:#08120b;
+}
+
+    .challenge .hint{ font-size:12px; color:var(--muted); margin-top:6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="card">
+      <h1>Confirm your pixel purchase</h1>
+
+      <div id="err" class="err"></div>
+
+      <div class="meta">
+        <div class="pill">Selected: <strong id="count">0</strong></div>
+        <div class="pill">Currency: <strong id="currency">—</strong></div>
+        <div class="pill">Hold: <strong id="reserveInfo">Active</strong></div>
+
+      </div>
+
+      <div class="challenge">
+ <label for="challengeText">
+  Optional message or dare 
+</label>
+  <textarea id="challengeText" placeholder="Describe your dare or leave a short message for your square."></textarea>
+  <div class="hint">Optional. If you include a dare, make it clear and feasible.</div>
+</div>
+
+
+
+      <div id="paypal-button-container"></div>
+      <div class="total" id="total">—</div>
+
+      <div id="ok" class="ok">Payment completed! Your pixels are yours.</div>
+<div class="note">
+  If your hold expires before you pay, you’ll need to select the pixels again.
+</div>
+
+      </div>
+    </div>
+
+    <script src="config.js?v=2025-09-01-006"></script>
+
+  <script>
+    // === Utilidades ===
+    const $ = (id) => document.getElementById(id);
+    const gridSize = 1000; // Debe coincidir con el lienzo (id <-> (x,y))
+
+    function setError(msg){
+      const el = $('err');
+      el.textContent = msg || 'An error occurred.';
+      el.style.display = 'block';
+    }
+    function clearError(){ $('err').style.display = 'none'; }
+
+    function setOK(msg){
+      const el = $('ok');
+      el.textContent = msg || '¡Done!';
+      el.style.display = 'block';
+    }
+
+    function setLoading(on){
+      $('card').classList.toggle('loading', !!on);
+    }
+
+    function money(amount, currency){
+      const v = (Number(amount)||0).toFixed(2);
+      return `${currency||'USD'} ${v}`;
+    }
+        function challengeTierFor(amount){
+      const a = Number(amount)||0;
+      if (a < 5)   return 'Mini';
+      if (a < 20)  return 'Regular';
+      if (a < 50)  return 'Large';
+      if (a < 100) return 'Epic';
+      return 'Legendary';
+
+    }
+
+    function getSelectedIds(){
+      try{
+        const raw = localStorage.getItem('selectedPixels') || '[]';
+        const arr = JSON.parse(raw);
+        if(!Array.isArray(arr)) return [];
+        const clean = Array.from(new Set(arr.map(v => Number(v)).filter(v => Number.isInteger(v) && v>=0)));
+        return clean;
+      }catch{ return []; }
+    }
+
+    function idsToPixels(ids){
+      return ids.map(id => ({ x: id % gridSize, y: Math.floor(id / gridSize) }));
+    }
+
+    async function loadConfig(){
+  if (window.APP_CONFIG) {
+    return {
+      currency: window.APP_CONFIG.CURRENCY || 'USD',
+      pricePerPixel: Number(window.APP_CONFIG.PRICE_PER_PIXEL || 1),
+      paypalClientId: window.APP_CONFIG.PAYPAL_CLIENT_ID || ''
+    };
+  }
+  // Fallback: solo si más adelante montas un backend con /api/config
+  const r = await fetch('/api/config');
+  if(!r.ok) throw new Error('Failed to fetch configuration');
+  return r.json();
+}
+
+
+    function loadPaypalSDK(clientId, currency){
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+       s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&components=buttons&enable-funding=card&intent=capture&currency=${encodeURIComponent(currency||'USD')}`;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load PayPal SDK'));
+        document.head.appendChild(s);
+      });
+    }
+
+
+const NOTIFY_URL = 'https://script.google.com/macros/s/AKfycbxh3VdWfQJvnZpRlZpWIvDekynLmQmWtPVrkkMVo4fn9p2TVvUWOr3hr4xtutOix73M/exec';
+
+async function notifyAdmin(data){
+  try {
+    await fetch(NOTIFY_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify(data),
+      keepalive: true
+    });
+  } catch (e) {
+    console.warn('Notify POST failed:', e);
+  }
+}
+
+
+    // --- Role helper (admin/user) ---
+    function currentRole(){
+      try { return (localStorage.getItem('o1m_isAdmin') === '1') ? 'admin' : 'user'; }
+      catch { return 'user'; }
+    }
+
+async function reserve(pixels){
+  // Lee datos locales
+  let overlayDraft = null;
+  try { overlayDraft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); } catch {}
+  const challengeText = (document.getElementById('challengeText')?.value || '').trim();
+
+  // 1) Intento backend (por si lo montas más adelante)
+  try{
+    const r = await fetch('/api/reserve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Role': currentRole() },
+      body: JSON.stringify({ pixels, overlayDraft, challenge: challengeText, role: currentRole() })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data?.paypalOrderId) return data;      // ← si existe backend válido, úsalo
+    console.warn('Reserve backend not ok:', data);
+  }catch(e){
+    console.warn('Reserve backend failed:', e);
+  }
+
+  // 2) Fallback: modo solo-frontend (sin backend)
+  const cfg = window.APP_CONFIG || {};
+  const price = Number(cfg.PRICE_PER_PIXEL || 1);
+  const count = Array.isArray(pixels) ? pixels.length : 0;
+  const amount = Number((count * price).toFixed(2));
+  return { paypalOrderId: null, amount };              // ← devolvemos solo el monto
+}
+function extractAmountCurrency(cap, fallbackAmount, fallbackCurrency){
+  // intenta leer del objeto de captura PayPal (cap.raw si hiciste capture del lado cliente)
+  const pu = cap?.raw?.purchase_units && cap.raw.purchase_units[0];
+  const payment = pu?.payments?.captures && pu.payments.captures[0];
+  const paidValue = payment?.amount?.value;
+  const paidCur   = payment?.amount?.currency_code;
+
+  const amount  = Number(paidValue ?? fallbackAmount ?? 0);
+  const currency= paidCur || fallbackCurrency || 'USD';
+  return {
+    amount: Math.max(0.01, Number(amount.toFixed(2))),
+    currency
+  };
+}
+
+
+function renderPaypal(orderOrAmount, onSuccess, onError){
+  if(!(window.paypal && window.paypal.Buttons)){
+    throw new Error('PayPal SDK no cargado');
+  }
+
+  window.paypal.Buttons({
+    // Si llega un orderId del servidor lo usamos; si no, creamos la orden aquí
+    createOrder: (data, actions) => {
+      if (orderOrAmount && typeof orderOrAmount === 'string' && orderOrAmount.length > 10) {
+        return orderOrAmount; // p.ej. PAYID-...
+      }
+      const value = Number(orderOrAmount || 0).toFixed(2);
+      return actions.order.create({
+        purchase_units: [{ amount: { value } }]
+      });
+    },
+
+    onApprove: async (dataPP, actions) => {
+      try {
+        let cap = null;
+
+        // 1) Intentar captura en backend (si existiera)
+        try {
+          const res = await fetch('/api/paypal/capture', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ orderId: dataPP.orderID })
+          });
+          if (res.ok) {
+            const body = await res.json().catch(()=> ({}));
+            if (body && body.ok) cap = body;
+          }
+        } catch(_) {}
+
+        // 2) Fallback: captura en cliente
+        if (!cap) {
+          if (!actions?.order?.capture) throw new Error('Capture failed (no actions.order.capture available)');
+          const clientCap = await actions.order.capture();
+          cap = {
+            ok: true,
+            id: clientCap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || null,
+            orderId: dataPP.orderID,
+            status: clientCap?.status || 'COMPLETED',
+            raw: clientCap
+          };
+        }
+
+        onSuccess && onSuccess(cap);
+      } catch (e) {
+        onError && onError(e);
+      }
+    },
+
+    onError: (err) => onError && onError(err)
+  }).render('#paypal-button-container');
+}
+
+    // === Flujo principal ===
+    (async function main(){
+      setLoading(true);
+      clearError();
+
+      // 1) Leer selección
+      const ids = getSelectedIds();
+const selectedCount = ids.length; // ← NUEVO
+$('count').textContent = String(selectedCount);
+if (selectedCount === 0) {
+  setLoading(false);
+  setError('Selecciona al menos un píxel antes de pagar.');
+  return;
+}
+
+      // Tomar el link del overlay ANTES de que PayPal limpie el localStorage
+let linkForEmail = null;
+try {
+  const od = JSON.parse(localStorage.getItem('overlayDraft') || 'null');
+  linkForEmail = od?.href || od?.url || od?.link || null;
+} catch {}
+
+      // 2) Cargar config y SDK
+      let cfg;
+      try{
+        cfg = await loadConfig();
+        $('currency').textContent = cfg.currency || 'USD';
+        $('total').textContent = money(0, cfg.currency);
+        await loadPaypalSDK(cfg.paypalClientId, cfg.currency);
+      }catch(e){
+        setLoading(false);
+        setError(e.message);
+        return;
+      }
+
+      // 3) Mapear ids -> (x,y) y reservar en backend
+      const pixels = idsToPixels(ids);
+      try{
+        const data = await reserve(pixels); // { paypalOrderId, amount }
+        
+        const amt = Number(data.amount);
+if (!Number.isFinite(amt) || amt < 0) {
+  throw new Error('Invalid amount returned by server.');
+}
+$('total').textContent = money(amt, cfg.currency);
+
+        // 4) Render botón PayPal con el orderId fijo
+                const tier = challengeTierFor(data.amount);
+        const tierEl = document.getElementById('challengeTier');
+        if (tierEl) tierEl.textContent = tier;
+        // opcional: persistir para uso del backend en la captura
+        try {
+          localStorage.setItem('challengeTier', tier);
+          const chText = (document.getElementById('challengeText')?.value || '').trim();
+          localStorage.setItem('challengeText', chText);
+        } catch{}
+
+  // data viene de reserve(...) o de tu cálculo de monto
+  const orderOrAmount = data?.paypalOrderId || Number(data?.amount || 0);
+
+  renderPaypal(
+    orderOrAmount,
+
+async (cap) => {
+  const cfg = window.APP_CONFIG || {};
+
+  // 1) IDs de píxeles seleccionados
+  let ids = [];
+  try { ids = JSON.parse(localStorage.getItem('selectedPixels') || '[]'); } catch {}
+  if (!ids.length && typeof getSelectedIds === 'function') { ids = getSelectedIds(); }
+  const selectedCount = ids.length;
+
+  // 2) Overlay elegido por el usuario
+  let overlayDraft = null;
+  try { overlayDraft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); } catch {}
+  const linkForEmail  = (overlayDraft && (overlayDraft.link || overlayDraft.href || overlayDraft.url)) || localStorage.getItem('link') || '';
+  const challengeText = (document.getElementById('challengeText')?.value || localStorage.getItem('challengeText') || '').trim();
+
+  // 3) Datos del pago (monto/moneda reales si están en la captura)
+  const calcAmount = Number(selectedCount * Number(cfg.PRICE_PER_PIXEL || 0));
+  const safeCalc   = Math.max(0.01, Number(calcAmount.toFixed(2)));
+  const { amount, currency } = extractAmountCurrency(cap, safeCalc, cfg.CURRENCY || 'USD');
+
+  // 4) IDs de la transacción
+  const orderId    = cap?.id || cap?.orderId || cap?.purchase_units?.[0]?.payments?.captures?.[0]?.id || '';
+  const payerEmail = cap?.payer?.email_address || '';
+
+// Normaliza overlayDraft antes de enviar
+if (!overlayDraft || typeof overlayDraft !== 'object') overlayDraft = {};
+
+// Si el usuario guardó la imagen como 'url'/'href', pásala a imgUrl
+if (overlayDraft.url && !overlayDraft.imgUrl) overlayDraft.imgUrl = overlayDraft.url;
+
+// Si el editor guardó imagen como dataURL, úsala
+if (overlayDraft.dataURL && !overlayDraft.imgUrl) overlayDraft.imgUrl = overlayDraft.dataURL;
+
+// Si NO hay imagen y NO hay color, aplica un color por defecto
+// Usa el mismo de tu preview '#34d399' para que coincida con lo que ves al editar
+if (!overlayDraft.imgUrl && !overlayDraft.color) overlayDraft.color = '#b40af2';
+
+// 5) Guardar compra en tu backend (Postgres)
+try {
+  const r = await fetch('/api/purchase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pixels: ids,                    // array de IDs
+      overlayDraft: {
+        color: overlayDraft.color || '',
+        imgUrl: overlayDraft.imgUrl || ''   // ya puede venir de dataURL / url
+      },
+      link: linkForEmail,
+      paypalOrderId: orderId,
+      buyerEmail: payerEmail,
+      amount,
+      currency,
+      challengeText
+    }),
+    keepalive: true
+  });
+
+  const resp = await r.json().catch(() => ({}));
+  if (resp?.conflict) {
+    alert('Algunos píxeles ya fueron tomados: ' + (resp.conflicts || []).join(', '));
+    return; // permite reintentar
+  }
+  if (!resp?.ok) {
+    console.warn('purchase NOT saved:', resp);
+  }
+} catch (e) {
+  console.warn('purchase POST failed:', e);
+}
+
+
+  // 6) Notificación secundaria (Apps Script) — opcional
+  try {
+    if (typeof notifyAdmin === 'function') {
+      await notifyAdmin({
+        count: selectedCount,
+        currency,
+        orderId,
+        challenge: challengeText,
+        overlayDraft: { link: linkForEmail }
+      });
+    }
+  } catch (e) {
+    console.warn('Notify success failed:', e);
+  }
+
+  // 7) Limpieza y OK
+  try {
+    localStorage.removeItem('selectedPixels');
+    localStorage.removeItem('overlayDraft');
+  } catch {}
+  setOK('Payment completed! Your pixels are yours.');
+},
+
+
+    // onError (fallo en pago)
+    async (err) => {
+      console.error(err);
+      setError(err?.message || 'Payment processing error.');
+      try {
+        if (typeof notifyAdmin === 'function') {
+          await notifyAdmin({
+            type: 'payment_error',
+            error: String(err?.message || err),
+            order: data?.paypalOrderId || null,   // clave que lees en el correo
+            paypalOrderId: data?.paypalOrderId || null,
+            role: (typeof currentRole === 'function' ? currentRole() : undefined)
+          });
+        }
+      } catch (e2) {
+        console.warn('Notify error failed:', e2);
+      }
+    }
+  );
+
+      }catch(e){
+        setError(e.message);
+      }finally{
+        setLoading(false);
+      }
+    })();
+
+  </script>
+</body>
+</html>
+
