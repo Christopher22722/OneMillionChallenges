@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ONE MILLION CHALLENGES</title>
+  <!-- Google Font para título -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap" rel="stylesheet">
+  <!-- Favicon PNG -->
+  <link rel="icon" href="logo.png" type="image/png" sizes="32x32">
+
+  <!-- PayPal SDK: NO se usa aquí, solo en checkout -->
+  <style>
+
+    /* Rules modal */
+#rulesModal .rules-box{
+  max-width: 900px;
+  width: calc(100vw - 40px);
+}
+#rulesModal #rulesFrame{
+  width: 100%;
+  height: min(72vh, 720px);
+  border: none;
+  background: transparent;   /* antes era #0f1117 */
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#rulesModal .rules-actions{
+  display:flex; justify-content:flex-end; gap:10px; margin-top:8px;
+}
+#rulesModal .rules-actions .cta{
+  display:inline-block; padding:8px 12px; border-radius:10px;
+  border:1px solid #2a2e34; text-decoration:none; color:#eaecef;
+}
+#rulesModal .rules-actions .cta:hover{
+  border-color:#3a3f4d;
+}
+
+  /* Accesibilidad */
+@media (prefers-reduced-motion: reduce){
+  html::before{ animation: none; }
+}
+
+    html, body {
+      margin: 2px; padding: 0;
+      height: calc(100% - 4px);
+      overflow: hidden; box-sizing: border-box;
+      background: #0688df;
+    }
+    *, *::before, *::after { box-sizing: inherit; }
+    body { position: relative; font-family: Arial, sans-serif; background: #fff; }
+
+    .header{
+  position: relative; display:flex; align-items:center; justify-content:center;
+  width:100%;
+  --grad: linear-gradient(90deg,
+    #ff3d00, #ffcc00, #00e676, #00b0ff, #7c4dff, #ff4081, #ff3d00);
+  background: var(--grad);
+  background-size: 300% 100%;
+  animation: rainbow-slide 12s linear infinite;
+  padding: 10px 0;
+  z-index: 1; /* por si acaso */
+}
+@keyframes rainbow-slide { to { background-position: 300% 0; } }
+@media (prefers-reduced-motion: reduce){
+  .header{ animation: none; }
+}
+/* Subrayado suave en botones del header */
+.header button{ position:relative; }
+.header button::after{
+  content:""; position:absolute; left:10%; right:10%; bottom:-4px; height:2px;
+  background: linear-gradient(90deg,#fff,#ffffffaa,#fff);
+  transform: scaleX(0); transform-origin:left; transition: transform .25s ease;
+}
+.header button:hover::after{ transform: scaleX(1); }
+
+/* Pulso suave del contador */
+#counter{ animation: pill-pulse 2.6s ease-in-out infinite; }
+@keyframes pill-pulse{
+  0%,100%{ box-shadow:0 0 0 rgba(37,211,102,0); }
+  50%{ box-shadow:0 0 18px rgba(37,211,102,.35); }
+}
+@media (prefers-reduced-motion: reduce){
+  #counter{ animation:none; }
+  .header button::after{ transition:none; }
+}
+
+    .title-wrapper { display: flex; align-items: center; gap: 8px; margin-top: -8px; }
+    .title-wrapper h1 { margin: 0; color: white; font-family: 'Poppins', sans-serif; font-size: 2rem; }
+    .title-wrapper img { height: 36px; width: auto; }
+
+    #undoBtn, #infoBtn, #shareBtn, #contactBtn, #rulesBtn, #paymentBtn, #editBtn, #luckyBtn {
+  position: absolute; top: 15px; padding: 5px 10px;
+  background: none; border: none; color: #ffffff;
+  font-weight: bold; font-size: 1rem; cursor: pointer;
+}
+
+
+   
+    #luckyBtn { right: 390px; }  /* queda a la izquierda de EDIT */
+
+    #undoBtn { right: 180px; top: 5px; font-size: 1.7rem;}
+    #infoBtn { left: 20px; }
+    #shareBtn { left: 120px; }
+    #contactBtn { left: 220px; }
+    #rulesBtn { left: 360px; }   /* <-- ocupa el hueco rojo */
+    #paymentBtn { right: 250px; } #editBtn { right: 320px; }
+    .header button:hover { text-decoration: underline; }
+
+    #counter {
+      position: absolute; top: 13px; right: 20px;
+      background: #fff; color: #0688df; border: 2px solid #0688df; border-radius: 12px;
+      padding: 5px 12px; font-weight: bold; font-size: 0.9rem; line-height: 1;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Lienzos */
+    #gridCanvas, #overlayCanvas {
+      position: absolute;
+      top: var(--header-height, 58px);
+      left: 0; right: 0; bottom: 0;
+      box-sizing: border-box;
+    }
+    #gridCanvas {
+      image-rendering: pixelated;
+      cursor: crosshair;
+      background: #ccc;
+        user-select:none;
+  -webkit-user-select:none;
+  -moz-user-select:none;
+  -ms-user-select:none;
+  touch-action:none; /* evita gestos que interfieran en touchpad/móvil */
+    }
+    /* El overlay no intercepta el mouse */
+    #overlayCanvas { pointer-events: none; }
+     /* Modales Info/Contact */
+.modal{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;           /* sobre todo */
+  padding: 20px;           /* respiración en bordes */
+  overflow: auto;          /* permite scroll si el contenido es más alto que la pantalla */
+}
+.modal .box{
+  background: #111;
+  color: #eee;
+  width: min(720px, 92vw); /* un poco más ancho que 640px */
+  max-height: 86vh;        /* límite de alto visible */
+  overflow: auto;          /* scroll interno del contenido */
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #333;
+  position: relative;
+}
+.modal .box h2{ margin: 0 0 8px; font-size: 18px; }
+
+/* ¡IMPORTANTE! aquí cerramos bien la regla de <p> */
+.modal .box p{
+  margin: 0;
+  line-height: 1.5;
+  color: #cfd6dc;
+}
+/* ——— Info “Vibe” ——— */
+.modal .box.vibe{
+  background: radial-gradient(1200px 800px at 10% -10%, #1a1f2e 0%, #0e1117 35%, #0b0c10 100%);
+  border: 2px solid transparent;
+  border-image: conic-gradient(
+    from 0deg,
+    #ff3d00, #ffcc00, #00e676, #00b0ff, #7c4dff, #ff4081, #ff3d00
+  ) 1;
+  box-shadow: 0 25px 80px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.03);
+}
+
+.vibe .hero{
+  position: relative;
+  padding: 6px 6px 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+.vibe .rainbow-title{
+  margin: 4px 0 6px;
+  font-size: 22px;
+  line-height: 1.1;
+  background: linear-gradient(90deg,#ff3d00,#ffcc00,#00e676,#00b0ff,#7c4dff,#ff4081,#ff3d00);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  background-size: 300% 100%;
+  animation: hue-shift 8s linear infinite;
+}
+@keyframes hue-shift{ to{ background-position: 300% 0; } }
+
+.vibe .punch{
+  margin: 0;
+  font-size: 14px;
+  color: #d7dce2;
+}
+
+.vibe .spark{
+  position:absolute; right: -6px; top: -10px;
+  font-size: 18px; filter: drop-shadow(0 0 6px rgba(255,255,255,.4));
+  animation: float 2.4s ease-in-out infinite;
+}
+@keyframes float{ 0%,100%{ transform: translateY(0) rotate(0deg);} 50%{ transform: translateY(-4px) rotate(8deg);} }
+
+.vibe .steps h3,
+.vibe .tiers h3,
+.vibe .rules h3,
+.vibe .why h3{
+  margin: 12px 0 6px; font-size: 16px;
+}
+
+.vibe ol{ margin: 6px 0 0 20px; }
+.vibe ol li{ margin: 4px 0; }
+
+.vibe .micro{ color:#9aa3ab; margin-top:6px; }
+
+.vibe .tier-grid .card{
+  background: linear-gradient(180deg,#12141b,#0f1117);
+  border: 1px solid #2a2e34;
+  border-radius: 12px; padding: 10px;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .2s ease;
+}
+.vibe .tier-grid .card:hover{
+  transform: translateY(-2px);
+  border-color: #3a3f4d;
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
+}
+
+.vibe .tip{
+  margin-top: 6px; font-size: 12px; color:#b9c2ca;
+}
+
+.vibe .cta-row{ display:flex; flex-wrap:wrap; gap:10px; margin-top: 10px; }
+.vibe .cta{
+  display:inline-block; padding:10px 14px; border-radius:12px;
+  border:1px solid #2a2e34; color:#eaecef; text-decoration:none; font-weight:700;
+  transition: transform .12s ease, border-color .15s ease, background .15s ease;
+}
+.vibe .cta:hover{ transform: translateY(-1px); border-color:#3a3f4d; }
+.vibe .cta.primary{
+  background: linear-gradient(90deg,#2ea44f,#25d366);
+  color:#08120b; border-color: transparent;
+  box-shadow: 0 6px 18px rgba(37,211,102,.25);
+}
+.vibe .cta.primary:hover{ transform: translateY(-2px); }
+
+/* helpers ya fuera de la regla <p> */
+.modal .box .cta-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.modal .box .cta{
+  display:inline-block; padding:8px 12px; border-radius:10px;
+  border:1px solid #2a2e34; color:#eaecef; text-decoration:none; font-weight:600;
+}
+.modal .box .cta:hover{ border-color:#3a3f4d; }
+.modal .box ul{ margin:8px 0 0 18px; padding:0; }
+.modal .box li{ margin:4px 0; color:#cfd6dc; }
+.modal .box small{ color:#9aa3ab; }
+.modal .box .tier-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-top:8px; }
+.modal .box .tier{ border:1px dashed #2a2e34; border-radius:12px; padding:10px; }
+.modal .box .tier b{ display:block; margin-bottom:6px; }
+
+/* La X siempre visible arriba mientras haces scroll */
+.modal .close{
+  position: sticky;
+  top: 0;
+  margin-left: auto;       /* se alinea a la derecha */
+  background: transparent;
+  border: 0;
+  color: #aaa;
+  font-size: 22px;
+  cursor: pointer;
+}
+/* Fix tamaños de íconos dentro de Contact */
+#contactModal .contact-item .icon{
+  width:34px; height:34px; overflow:hidden;
+  display:grid; place-items:center;
+}
+#contactModal .contact-item .icon svg{
+  width:20px; height:20px; display:block; flex:none;
+}
+/* Colores del “badge” del ícono */
+#contactModal .contact-item .icon{ color:#25d366; }   /* WhatsApp */
+#contactModal .contact-item .icon.fb{ color:#1778F2; }/* Facebook */
+
+.modal .close:hover{ color:#fff; }
+/* === CONTACT CARD (wow) === */
+#contactModal .box.contact-card{
+  background: radial-gradient(1000px 600px at 0% -10%, #1a1f2e 0%, #0e1117 35%, #0b0c10 100%);
+  border: 2px solid transparent;
+  border-image: conic-gradient(from 0deg,#25d366,#2ea44f,#00b0ff,#7c4dff,#ff4081,#ffcc00,#25d366) 1;
+  box-shadow: 0 25px 80px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.03);
+}
+#contactModal .contact-title{
+  margin:2px 0 4px; font-size:20px;
+  background: linear-gradient(90deg,#2ea44f,#25d366,#00b0ff);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+#contactModal .contact-sub{ margin:0 0 8px; color:#cfd6dc }
+
+/* Listado */
+#contactModal .contact-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px }
+
+/* Fila clicable */
+#contactModal .contact-item{
+  display:flex; align-items:center; gap:12px; text-decoration:none; color:#eaecef;
+  background: linear-gradient(180deg,#12141b,#0f1117);
+  border:1px solid #2a2e34; border-radius:12px; padding:10px;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .2s ease, background .2s ease;
+}
+#contactModal .contact-item:hover{
+  transform: translateY(-2px);
+  border-color:#3a3f4d;
+  box-shadow: 0 10px 28px rgba(0,0,0,.35);
+}
+
+/* Badge del icono */
+#contactModal .contact-item .icon{
+  width:36px; height:36px; border-radius:10px; display:grid; place-items:center; flex:0 0 auto;
+  overflow:hidden;
+}
+#contactModal .contact-item .icon svg{ width:20px; height:20px; display:block }
+
+/* Colores por canal */
+#contactModal .contact-item.whatsapp .icon{ background:#132a1c; color:#25d366; }
+#contactModal .contact-item.email    .icon{ background:#121a26; color:#cfd6dc; }
+#contactModal .contact-item.facebook .icon{ background:#132038; color:#1778F2; }
+
+/* Texto */
+#contactModal .contact-item .text b{ display:block; font-size:14px; line-height:1.2 }
+#contactModal .contact-item .text small{ color:#9aa3ab; font-size:12px }
+
+/* Acciones secundarias bajo cada fila (mailto/copy) */
+#contactModal .contact-actions{
+  display:flex; gap:8px; align-items:center;
+  margin:6px 0 2px 48px; /* alineado con el texto (36px + gap) */
+}
+#contactModal .contact-actions .mini-link{
+  font-size:12px; color:#9aa3ab; text-decoration:none; border-bottom:1px dashed #3a3f4d;
+}
+#contactModal .contact-actions .mini-link:hover{ color:#eaecef; border-bottom-color:#eaecef; }
+#contactModal .contact-actions .copy{
+  padding:6px 10px; font-size:12px; border-radius:8px; cursor:pointer;
+  background:#1a1d25; color:#eaecef; border:1px solid #2a2e34;
+}
+#contactModal .contact-actions .copy:hover{ border-color:#3a3f4d; }
+
+  </style>
+</head>
+<body>
+  <div class="header" id="header">
+    <button id="undoBtn">↺</button>
+    <button id="infoBtn">Info</button>
+    <button id="shareBtn">Share</button>
+    <button id="contactBtn">Contact us</button>
+    <button id="paymentBtn">Pay</button>
+    <button id="editBtn">Edit</button>
+    <button id="luckyBtn" title="Pick random free pixels">Lucky</button>
+    <button id="rulesBtn">Rules</button>
+
+    <div class="title-wrapper"><h1>ONE MILLION CHALLENGES</h1></div>
+    <div id="counter">0 / 1000000</div>
+  </div>
+
+  <!-- Lienzo base (tus píxeles) -->
+  <canvas id="gridCanvas"></canvas>
+  <!-- Lienzo de PREVISUALIZACIÓN (solo muestra el borrador del editor) -->
+  <canvas id="overlayCanvas"></canvas>
+
+  <audio id="paintSound" src="pintar.mp3" preload="auto"></audio>
+
+  <!-- Modales (igual que los tuyos; omito por brevedad) -->
+
+  <!-- Cargar configuración (ENDPOINT, PRICE_PER_PIXEL, etc.) -->
+<script src="config.js?v=2025-09-01-006"></script>
+
+  <script>
+    const gridSize   = 1000,
+          total      = gridSize * gridSize,
+      canvas     = document.getElementById('gridCanvas'),
+      ctx        = canvas.getContext('2d'),
+      overlay    = document.getElementById('overlayCanvas'),
+      octx       = overlay.getContext('2d'),
+      counter    = document.getElementById('counter'),
+      undoBtn    = document.getElementById('undoBtn'),
+      infoBtn    = document.getElementById('infoBtn'),
+      shareBtn   = document.getElementById('shareBtn'),
+      contactBtn = document.getElementById('contactBtn'),
+      header     = document.getElementById('header'),
+      paintSound = document.getElementById('paintSound'),
+      paymentBtn = document.getElementById('paymentBtn'),
+      editBtn    = document.getElementById('editBtn'),
+      luckyBtn   = document.getElementById('luckyBtn'),
+      rulesBtn   = document.getElementById('rulesBtn');
+
+
+      // === Helpers para "encajar" la imagen completa en la selección ===
+function idsToMatrix(ids, gridSize){
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const pts = [];
+  for (const raw of ids){
+    const id = Number(raw); if(!Number.isFinite(id)) continue;
+    const x = id % gridSize, y = Math.floor(id / gridSize);
+    pts.push([x,y]);
+    if (x<minX) minX=x; if (y<minY) minY=y;
+    if (x>maxX) maxX=x; if (y>maxY) maxY=y;
+  }
+  const cols = (maxX - minX + 1) || 1;
+  const rows = (maxY - minY + 1) || 1;
+  const M = Array.from({length: rows}, () => Array(cols).fill(0));
+  for (const [x,y] of pts) M[y - minY][x - minX] = 1;
+  return { M, minX, minY };
+}
+
+function largestRectangleOfOnes(M){
+  const rows = M.length, cols = M[0]?.length || 0;
+  const H = Array(cols).fill(0);
+  let best = { area:0, x:0, y:0, w:0, h:0 };
+
+  function maxRectInHistogram(h, baseRow){
+    const st = [];
+    for (let i=0; i<=h.length; i++){
+      const cur = (i< h.length) ? h[i] : 0;
+      let start = i;
+      while (st.length && st[st.length-1].h > cur){
+        const {h:hh, i:idx} = st.pop();
+        const w = i - idx;
+        const area = hh * w;
+        if (area > best.area){
+          best = { area, x: idx, y: baseRow - hh + 1, w, h: hh };
+        }
+        start = idx;
+      }
+      st.push({h:cur, i:start});
+    }
+  }
+
+  for (let r=0; r<rows; r++){
+    for (let c=0; c<cols; c++){
+      H[c] = M[r][c] ? H[c]+1 : 0;
+    }
+    maxRectInHistogram(H, r);
+  }
+  return best;
+}
+
+function maxInternalRectFromIds(ids, gridSize){
+  if (!Array.isArray(ids) || !ids.length) return null;
+  const { M, minX, minY } = idsToMatrix(ids, gridSize);
+  const best = largestRectangleOfOnes(M);
+  if (best.area <= 0) return null;
+  return { x: minX + best.x, y: minY + best.y, w: best.w, h: best.h };
+}
+
+      // ====== Interacción con el overlay (abrir link / media) ======
+    function cellInOverlayBox(cell){
+      if(!overlayDraft || !overlayDraft.box) return false;
+      const { x, y, cols, rows } = overlayDraft.box;
+      return (cell.x >= x && cell.x < x + cols && cell.y >= y && cell.y < y + rows);
+    }
+            function overlayHasMedia(){
+      if(!overlayDraft) return false;
+      if (overlayDraft.type === 'image') {
+        return !!(overlayDraft.dataURL || overlayDraft.url);
+      }
+      if (overlayDraft.type === 'video') {
+        return !!(overlayDraft.dataURL || overlayDraft.url || overlayDraft.blobKey);
+      }
+      return false;
+    }
+
+    // === IndexedDB para leer blobs del borrador ===
+    const IDB_NAME = 'o1mDrafts', IDB_STORE = 'drafts';
+    function idbOpen(){
+      return new Promise((res, rej)=>{
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e)=>{ e.target.result.createObjectStore(IDB_STORE, { keyPath:'id' }); };
+        req.onsuccess = ()=>res(req.result);
+        req.onerror = ()=>rej(req.error);
+      });
+    }
+    async function idbGetBlob(id){
+      const db = await idbOpen();
+      return new Promise((res, rej)=>{
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const q = tx.objectStore(IDB_STORE).get(id);
+        q.onsuccess = ()=>{ const r=q.result; db.close(); res(r && r.blob ? r : null); };
+        q.onerror = ()=>{ const err=q.error; db.close(); rej(err); };
+      });
+    }
+
+    function overlayHasLink(){
+      if(!overlayDraft) return false;
+      return !!(overlayDraft.link || (overlayDraft.type==='link' && overlayDraft.url));
+    }
+    
+        async function openOverlayMedia(){
+          cancelDrag();
+      if(!overlayHasMedia()) return;
+
+      const isVideo = overlayDraft.type === 'video';
+      let src = overlayDraft.dataURL || overlayDraft.url;
+      let createdURL = null;
+
+      // Si es video y solo tenemos blobKey, léelo desde IndexedDB
+      if (!src && isVideo && overlayDraft.blobKey){
+        try{
+          const rec = await idbGetBlob(overlayDraft.blobKey);
+          if (rec && rec.blob){
+            createdURL = URL.createObjectURL(rec.blob);
+            src = createdURL;
+          }
+        }catch(e){ console.warn('No se pudo leer el video de IndexedDB:', e); }
+      }
+      if(!src) return;
+
+      const type = (/\.webm(\?|#|$)/i.test(src) || /^data:video\/webm/i.test(src)) ? 'video/webm' : 'video/mp4';
+
+      const html = `<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${isVideo ? 'Video' : 'Imagen'}</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;}
+  .wrapper{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
+  .wrapper img,.wrapper video{
+    max-width:100vw;
+    max-height:100vh;
+    width:auto;height:auto;
+    object-fit:contain;
+    display:block;
+  }
+  .tip{position:fixed;left:0;right:0;bottom:0;padding:8px 12px;color:#bbb;font:12px system-ui;background:rgba(0,0,0,.5)}
+</style>
+</head><body>
+    <div class="wrapper">
+  ${isVideo
+    ? `<video controls playsinline preload="metadata" muted>
+         <source src="${src}" type="${type}">
+         Tu navegador no soporta este formato de video.
+       </video>
+       <div class="tip">Si no inicia solo, pulsa ▶ para reproducir.</div>`
+    : `<img src="${src}" alt="imagen">`}
+</div>
+
+</body></html>`;
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const url  = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      setTimeout(()=>{
+        URL.revokeObjectURL(url);
+        if (createdURL) URL.revokeObjectURL(createdURL);
+      }, 30000);
+      if(!w){ window.location.href = url; }
+    }
+    function openOverlayLink(){
+       cancelDrag();
+      if(!overlayHasLink()) return;
+      const href = overlayDraft.link || overlayDraft.url;
+      if(href){ window.open(href, '_blank', 'noopener'); }
+    }
+        let overlayMenu = document.getElementById('overlayMenu');
+        let justOpenedMenu = false;
+    function showOverlayMenu(pageX, pageY){
+      if (!overlayMenu) overlayMenu = document.getElementById('overlayMenu');
+      const items = [];
+      if(overlayHasMedia()) items.push({ key:'media', label: (overlayDraft.type==='video'?'Play video':'Abrir imagen'), action: openOverlayMedia });
+      if(overlayHasLink()) items.push({ key:'link',  label:'Abrir enlace', action: openOverlayLink });
+      if(items.length <= 1){
+        if(items.length === 1) items[0].action();
+        return;
+      }
+      overlayMenu.innerHTML = '';
+      items.forEach(it=>{
+        const btn = document.createElement('button');
+        btn.textContent = it.label;
+        btn.style.display='block';
+        btn.style.width='100%';
+        btn.style.background='transparent';
+        btn.style.border='1px solid #2a2e34';
+        btn.style.color='#eaecef';
+        btn.style.padding='8px 10px';
+        btn.style.margin='4px 0';
+        btn.style.borderRadius='8px';
+        btn.style.cursor='pointer';
+        btn.onmouseenter=()=>{ btn.style.borderColor='#3a3f4d'; };
+        btn.onmouseleave=()=>{ btn.style.borderColor='#2a2e34'; };
+        btn.onclick=()=>{ hideOverlayMenu(); it.action(); };
+        overlayMenu.appendChild(btn);
+      });
+      const scrollX = window.scrollX || document.documentElement.scrollLeft;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      overlayMenu.style.left = (pageX + scrollX) + 'px';
+      overlayMenu.style.top  = (pageY + scrollY) + 'px';
+      overlayMenu.style.display='block';
+      justOpenedMenu = true;
+setTimeout(()=>{ justOpenedMenu = false; }, 0);
+
+    }
+    function hideOverlayMenu(){ overlayMenu.style.display='none'; }
+    document.addEventListener('click', (e)=>{
+  const menu = overlayMenu || document.getElementById('overlayMenu');
+  if (!menu) return;                  // aún no existe el div
+  if (justOpenedMenu) {               // ignora el mismo click que lo abrió
+    justOpenedMenu = false;
+    return;
+  }
+  if (menu.style.display==='block' && !menu.contains(e.target)) hideOverlayMenu();
+});
+
+    // 1) Canvas interno
+    canvas.width = gridSize;   canvas.height = gridSize;
+    overlay.width = gridSize;  overlay.height = gridSize;
+
+    // 2) Ajuste CSS
+    function fitCanvas() {
+      const headerH = header.offsetHeight;
+      document.documentElement.style.setProperty('--header-height', headerH + 'px');
+      for (const el of [canvas, overlay]) {
+        el.style.top    = headerH + 'px';
+        el.style.width  = (window.innerWidth - 4) + 'px';
+        el.style.height = (window.innerHeight - headerH - 4) + 'px';
+      }
+    }
+    window.addEventListener('resize', fitCanvas);
+    fitCanvas();
+
+    // 3) Fondo gris base
+    ctx.fillStyle = '#ccc';
+    ctx.fillRect(0, 0, gridSize, gridSize);
+
+    // 4) Estado selección
+
+   const clicked = new Set(), history = [], taken = new Set();
+   const ENDPOINT = (window.APP_CONFIG && window.APP_CONFIG.ENDPOINT) || '';
+   const ENDPOINT_READ = ENDPOINT;
+   const linksById = new Map(); // idPixel -> link
+
+
+// Cache de imágenes + loader robusto
+const imgCache = new Map();
+async function loadImg(url){
+  if (imgCache.has(url)) return imgCache.get(url);
+  const img = new Image();
+  if (String(url).startsWith('http')) { try { img.crossOrigin = 'anonymous'; } catch {} }
+  img.src = url;
+  if (img.decode) {
+    try { await img.decode(); }
+    catch { await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; }); }
+  } else {
+    await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; });
+  }
+  imgCache.set(url, img);
+  return img;
+}
+
+// Dibuja una sola vez por grupo (url) ajustando al bounding box de sus píxeles
+async function drawImgIntoPixels(url, pts){
+  if (!Array.isArray(pts) || !pts.length) return;
+  const xs = pts.map(p => p.x);
+  const ys = pts.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+  const rect = { x: minX, y: minY, w: (maxX - minX + 1), h: (maxY - minY + 1) };
+
+  const img = await loadImg(url);
+  const sw = img.naturalWidth || img.width;
+  const sh = img.naturalHeight || img.height;
+  const s  = Math.min(rect.w / sw, rect.h / sh, 1); // contain sin upscale
+  const dw = Math.max(1, Math.round(sw * s));
+  const dh = Math.max(1, Math.round(sh * s));
+  const dx = Math.round(rect.x + (rect.w - dw) / 2);
+  const dy = Math.round(rect.y + (rect.h - dh) / 2);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
+  ctx.restore();
+}
+
+
+async function loadTakenAndPaint(){
+  try{
+    if (!ENDPOINT_READ) {
+      console.warn('No ENDPOINT configured in APP_CONFIG.ENDPOINT');
+      return;
+    }
+    // evita caché del navegador
+    const res  = await fetch(`${ENDPOINT_READ}?action=grid&t=${Date.now()}`, { cache:'no-store' });
+    if(!res.ok) throw new Error('grid request failed: ' + res.status);
+    const data = await res.json();
+
+    // Soporta ambos nombres de campo: occupiedIds (nuevo) u occupied (viejo)
+    const ids  = Array.isArray(data.occupiedIds) ? data.occupiedIds
+              : Array.isArray(data.occupied)    ? data.occupied
+              : [];
+
+    // Limpia cualquier estado previo de links y ocupados
+    linksById.clear();
+
+    // Pinta ocupados base en gris oscuro
+    ctx.setTransform(1,0,0,1,0,0);
+ctx.clearRect(0,0,canvas.width, canvas.height);
+// (AÑADIR) fondo gris claro para celdas libres
+ctx.fillStyle = '#ccc';
+ctx.fillRect(0, 0, gridSize, gridSize);
+
+
+    ctx.save();
+    ctx.fillStyle = '#222';
+    for (const raw of ids){
+      const id = Number(raw);
+      if (!Number.isFinite(id)) continue;
+      if (!taken.has(id)) taken.add(id);
+      const y = Math.floor(id / gridSize);
+      const x = id % gridSize;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.restore();
+
+    // Overlays por-pixel desde backend (color y/o link)
+    // data.overlays: [{ id, color, imgUrl, link }]
+    const overlays = Array.isArray(data.overlays) ? data.overlays : [];
+    // ← NUEVO: grupos de imagen por URL
+    await reconcileDraftWithServer(overlays);
+    const imgGroups = new Map(); // url -> [{x,y}]
+    for (const ov of overlays){
+      const id = Number(ov.id);
+      if (!Number.isFinite(id)) continue;
+      const y = Math.floor(id / gridSize);
+      const x = id % gridSize;
+// ← NUEVO: si trae imagen, agrégalo a su grupo
+if (ov.imgUrl) {
+  const arr = imgGroups.get(ov.imgUrl) || [];
+  arr.push({ x, y });
+  imgGroups.set(ov.imgUrl, arr);
+}
+
+      // si trae color: píntalo 1×1
+      if (ov.color){
+        ctx.fillStyle = ov.color;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      // guarda link para click
+      if (ov.link){
+        linksById.set(id, ov.link);
+      }
+      // (si en el futuro agregas box, imagen, etc., aquí puedes extender)
+    }
+// ← NUEVO: pinta las imágenes del backend
+for (const [url, pts] of imgGroups) {
+  await drawImgIntoPixels(url, pts);
+}
+
+
+  }catch(err){
+    console.warn('loadTakenAndPaint error:', err);
+  }
+  // ← NUEVO: helper para dibujar una imagen recortada a los píxeles comprados
+async function drawImgIntoPixels(url, pts){
+  if (!pts || !pts.length) return;
+
+  // 1) bounding box
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  for (const p of pts){
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const rectW = (maxX - minX + 1);
+  const rectH = (maxY - minY + 1);
+
+  // 2) carga imagen
+  const img = await new Promise((resolve, reject) => {
+    const im = new Image();
+    try { im.crossOrigin = 'anonymous'; } catch(_){}
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = url;
+  });
+
+  // 3) “contain” (encajar sin deformar)
+  const scale = Math.min(rectW / img.width, rectH / img.height);
+  const dw = Math.max(1, Math.floor(img.width  * scale));
+  const dh = Math.max(1, Math.floor(img.height * scale));
+  const dx = minX + Math.floor((rectW - dw)/2);
+  const dy = minY + Math.floor((rectH - dh)/2);
+
+  // 4) recorta a los píxeles comprados y dibuja
+  ctx.save();
+  ctx.beginPath();
+  for (const p of pts){ ctx.rect(p.x, p.y, 1, 1); }
+  ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+}
+
+}
+// Reconciliar: mantener el borrador visible hasta que el servidor confirme,
+// luego limpiar overlayDraft y el flag overlayDraft_paid.
+async function reconcileDraftWithServer(overlaysFromServer){
+  let draft = null, paid = null;
+  try { draft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); } catch {}
+  try { paid  = JSON.parse(localStorage.getItem('overlayDraft_paid') || 'null'); } catch {}
+
+  if (!draft || !draft.box) return; // nada que reconciliar
+
+  // Mapa {id -> overlay} de lo recibido del servidor
+  const byId = new Map((overlaysFromServer || []).map(o => [Number(o.id), o]));
+  const ids = draft.selectedIds || draft.ids || [];
+
+  const serverHasImg = ids.some(id => {
+    const ov = byId.get(Number(id));
+    return ov && ov.imgUrl && ov.imgUrl.length > 0;
+  });
+
+  if (serverHasImg) {
+    // Ya llegó al servidor → limpia borradores locales
+    try {
+      localStorage.removeItem('overlayDraft');
+      localStorage.removeItem('overlayDraft_paid');
+    } catch {}
+  } else if (paid) {
+    // Aún no llega: reintenta (backoff simple)
+    setTimeout(async ()=> {
+      try { await loadTakenAndPaint(); } catch {}
+    }, 1500);
+  }
+}
+
+
+// Lanza la carga cuando el DOM esté listo (variables ya existen)
+document.addEventListener('DOMContentLoaded', loadTakenAndPaint);
+
+// taken = comprados/ocupados (cárgalos del backend)
+    let isDragging = false, dragStart = null, dragLast = null;
+    let suppressDrag = false;
+
+function cancelDrag(clearPreview = true){
+  isDragging = false;
+  dragStart = null;
+  dragLast  = null;
+  suppressDrag = false;
+  if (clearPreview){
+    octx.setTransform(1,0,0,1,0,0);
+    octx.clearRect(0,0,overlay.width, overlay.height);
+    drawOverlay(); // re-pinta sólo la previsualización del editor
+  }
+}
+
+// Si la ventana pierde foco (p.ej., abriste una pestaña nueva), cancela el drag:
+window.addEventListener('blur', () => cancelDrag());
+    function updateCounter() { counter.textContent = `${clicked.size} / ${total}`; }
+    // ===== Random-pick helpers (Lucky) =====
+function isFree(id){ return !clicked.has(id) && !taken.has(id); }
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+function factorPairs(n){
+  const out=[];
+  for(let w=1; w*w<=n; w++){
+    if(n%w===0){
+      const h = (n / w) | 0;
+      out.push([w,h]);
+      if(w!==h) out.push([h,w]);
+    }
+  }
+  // únicos y ordenados por “más cuadrado” primero
+  const seen=new Set(), uniq=[];
+  for(const [w,h] of out){
+    const key = w<=h ? `${w}x${h}` : `${h}x${w}`;
+    if(!seen.has(key)){ seen.add(key); uniq.push([w,h]); }
+  }
+  uniq.sort((a,b)=>Math.abs(a[0]-a[1]) - Math.abs(b[0]-b[1]));
+  return uniq;
+}
+
+function blockIsFree(x,y,w,h){
+  for(let yy=y; yy<y+h; yy++){
+    for(let xx=x; xx<x+w; xx++){
+      const id = yy*gridSize + xx;
+      if(!isFree(id)) return false;
+    }
+  }
+  return true;
+}
+
+function findBlock(count, triesPerShape=300){
+  if(count===1){
+    // intentos al azar
+    for(let t=0;t<5000;t++){
+      const x = randInt(0, gridSize-1), y = randInt(0, gridSize-1);
+      const id = y*gridSize + x;
+      if(isFree(id)) return {x,y,w:1,h:1};
+    }
+    // fallback lineal
+    for(let y=0;y<gridSize;y++){
+      for(let x=0;x<gridSize;x++){
+        const id = y*gridSize + x;
+        if(isFree(id)) return {x,y,w:1,h:1};
+      }
+    }
+    return null;
+  }
+
+  const shapes = factorPairs(count);
+  // 1) intentos aleatorios por cada forma posible w×h
+  for(const [w,h] of shapes){
+    if(w>gridSize || h>gridSize) continue;
+    for(let t=0;t<triesPerShape;t++){
+      const x = randInt(0, gridSize - w);
+      const y = randInt(0, gridSize - h);
+      if(blockIsFree(x,y,w,h)) return {x,y,w,h};
+    }
+  }
+  // 2) fallback: primer ajuste (puede ser más lento, última opción)
+  for(const [w,h] of shapes){
+    if(w>gridSize || h>gridSize) continue;
+    for(let y=0;y<=gridSize - h; y++){
+      for(let x=0;x<=gridSize - w; x++){
+        if(blockIsFree(x,y,w,h)) return {x,y,w,h};
+      }
+    }
+  }
+  return null;
+}
+
+function drawBlockToSelection(x,y,w,h){
+  const newIds=[];
+  ctx.fillStyle = 'blue';
+  for(let yy=y; yy<y+h; yy++){
+    for(let xx=x; xx<x+w; xx++){
+      const id = yy*gridSize + xx;
+      if(isFree(id)){
+        clicked.add(id);
+        ctx.fillRect(xx, yy, 1, 1);
+        newIds.push(id);
+      }
+    }
+  }
+  if(newIds.length){
+    recordAction(newIds);
+    updateCounter();
+    playPaintSound();
+  }
+}
+
+function pickRandomAvailable(count){
+  cancelDrag(); // limpia previews de arrastre
+  if(count < 1) return;
+  if(count > total){ alert('That exceeds the canvas size.'); return; }
+
+  const blk = findBlock(count);
+  if(!blk){
+    alert('No contiguous free block of '+count+' pixels was found. Try a smaller number or another time.');
+    return;
+  }
+  drawBlockToSelection(blk.x, blk.y, blk.w, blk.h);
+}
+    function recordAction(ids) { if (ids.length) history.push(ids); }
+
+    // 5) Mapeo punto→celda
+    function getCell(e) {
+      const r = canvas.getBoundingClientRect();
+      let x = Math.floor((e.clientX - r.left) * gridSize / r.width);
+      let y = Math.floor((e.clientY - r.top)  * gridSize / r.height);
+      x = Math.max(0, Math.min(gridSize - 1, x));
+      y = Math.max(0, Math.min(gridSize - 1, y));
+      return { x, y };
+    }
+
+    // Sonido
+    let lastSound = 0;
+    function playPaintSound() {
+      const now = Date.now();
+      if (now - lastSound > 80) {
+        paintSound.currentTime = 0;
+        paintSound.play();
+        lastSound = now;
+      }
+    }
+
+    // 6) Arrastre para pintar (tu lógica original)
+    canvas.addEventListener('mousedown', e => {
+  const cell = getCell(e);
+
+  // Si hay overlay interactivo bajo el cursor, NO iniciar arrastre
+  if (overlayDraft && cellInOverlayBox(cell) && (overlayHasMedia() || overlayHasLink())){
+    suppressDrag = true;      // bloquea el arrastre hasta que ocurra el click/dblclick
+    return;
+  }
+
+  isDragging = true;
+  dragStart  = cell;
+  dragLast   = cell;
+
+  // PREVIEW inicial (1x1)
+  octx.setTransform(1,0,0,1,0,0);
+  octx.clearRect(0,0,overlay.width, overlay.height);
+  drawOverlay(); // redibuja contenido del editor si lo hay
+  const x0i = dragStart.x, y0i = dragStart.y;
+  octx.globalAlpha = 0.25;
+  octx.fillStyle = 'blue';
+  octx.fillRect(x0i, y0i, 1, 1);
+  octx.globalAlpha = 1;
+  octx.strokeStyle = 'rgba(0,0,0,0.6)';
+  octx.lineWidth = 1;
+  octx.setLineDash([4,2]);
+  octx.strokeRect(x0i + 0.5, y0i + 0.5, 0, 0);
+  octx.setLineDash([]);
+});
+
+
+        document.addEventListener('mousemove', e => {
+  if (!isDragging || suppressDrag) return;
+
+      dragLast = getCell(e);
+
+      // PREVIEW del rectángulo mientras se arrastra
+      octx.setTransform(1,0,0,1,0,0);
+      octx.clearRect(0,0,overlay.width, overlay.height);
+      drawOverlay(); // mantiene la previsualización del editor
+
+      const x0 = Math.min(dragStart.x, dragLast.x);
+      const y0 = Math.min(dragStart.y, dragLast.y);
+      const w  = Math.abs(dragLast.x - dragStart.x) + 1;
+      const h  = Math.abs(dragLast.y - dragStart.y) + 1;
+
+      octx.globalAlpha = 0.25;
+      octx.fillStyle = 'blue';
+      octx.fillRect(x0, y0, w, h);
+      octx.globalAlpha = 1;
+
+      octx.strokeStyle = 'rgba(0,0,0,0.6)';
+      octx.lineWidth = 1;
+      octx.setLineDash([4,2]);
+      octx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+      octx.setLineDash([]);
+    });
+
+    document.addEventListener('mouseup', e => {
+  if (!isDragging || suppressDrag) { suppressDrag = false; return; }
+  isDragging = false;
+  if (!dragStart) return;
+
+  const end = dragLast || getCell(e);
+  const x0 = Math.min(dragStart.x, end.x), x1 = Math.max(dragStart.x, end.x);
+  const y0 = Math.min(dragStart.y, end.y), y1 = Math.max(dragStart.y, end.y);
+
+  const newIds = [];
+  ctx.fillStyle = 'blue'; // mismo color que usabas antes
+  for (let yy = y0; yy <= y1; yy++) {
+    for (let xx = x0; xx <= x1; xx++) {
+      const id = yy * gridSize + xx;
+      if (!clicked.has(id) && !taken.has(id)) {
+        clicked.add(id);
+        newIds.push(id);
+        ctx.fillRect(xx, yy, 1, 1);
+        playPaintSound();
+      }
+    }
+  }
+  recordAction(newIds);
+  updateCounter();
+    // Quita el preview del arrastre
+  drawOverlay();
+});
+
+
+        // 7) Click para pintar 1 celda o abrir overlay
+    canvas.addEventListener('click', e => {
+  const cell = getCell(e);
+
+  if (overlayDraft && cellInOverlayBox(cell)) {
+    const hasM = overlayHasMedia();
+    const hasL = overlayHasLink();
+    if (hasM || hasL) {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelDrag(); // <- MUY IMPORTANTE
+      showOverlayMenu(e.clientX, e.clientY); // abre menú o acción directa si hay 1 ítem
+      return;
+    }
+  }        
+      // Si no hay overlay interactivo, proceder a pintar 1 celda
+      const { x, y } = cell;
+      const id = y * gridSize + x;
+      // Si el pixel ya está comprado y tiene link en backend, ábrelo
+
+// Si el pixel ya está comprado, no pintar. Si además tiene link, ábrelo.
+if (taken.has(id)) {
+  if (linksById.has(id)) {
+    window.open(linksById.get(id), '_blank', 'noopener');
+  }
+  return;
+}
+
+      if (!clicked.has(id)) {
+        clicked.add(id);
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(x, y, 1, 1);
+        playPaintSound();
+        recordAction([id]);
+        updateCounter();
+      }
+    });
+canvas.addEventListener('dblclick', e => {
+  const cell = getCell(e);
+  if (overlayDraft && cellInOverlayBox(cell)) {
+    e.preventDefault();
+    e.stopPropagation();
+    cancelDrag();
+    if (overlayHasMedia())      { openOverlayMedia(); }
+    else if (overlayHasLink())  { openOverlayLink();  }
+  }
+});
+
+    // 8) Undo
+    function undo() {
+      const last = history.pop();
+      if (!last) return;
+      ctx.fillStyle = '#ccc';
+      last.forEach(id => {
+        clicked.delete(id);
+        const yy = Math.floor(id / gridSize),
+              xx = id % gridSize;
+        ctx.fillRect(xx, yy, 1, 1);
+      });
+      updateCounter();
+    }
+    undoBtn.addEventListener('click', undo);
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z') { e.preventDefault(); undo(); }
+    });
+ // ) Info & Contact modals
+    function openModal(id){ const el = document.getElementById(id); if (el) el.style.display = 'flex'; }
+    function closeModal(id){ const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+
+    infoBtn.addEventListener('click',   () => openModal('infoModal'));
+    contactBtn.addEventListener('click',()=> openModal('contactModal'));
+    // Abre Rules como modal e inyecta el iframe
+function openRulesModal(){
+  const frame = document.getElementById('rulesFrame');
+
+  // Cargar solo la primera vez
+  if (!frame.src || frame.src.endsWith('about:blank')) {
+    // Una sola vez: al cargar, “aplanamos” la tarjeta interna
+    frame.addEventListener('load', () => {
+      try{
+        const doc  = frame.contentDocument || frame.contentWindow.document;
+        // Fondo transparente y sin márgenes
+        doc.body.style.background = 'transparent';
+        const wrap = doc.querySelector('.wrap');
+        if (wrap) wrap.style.margin = '0';
+        // La “card” de rules.html sin borde/box-shadow/padding
+        const card = doc.querySelector('.card');
+        if (card){
+          card.style.background  = 'transparent';
+          card.style.border      = '0';
+          card.style.boxShadow   = 'none';
+          card.style.padding     = '0';
+        }
+      }catch(e){ /* mismo origen => OK; si no, se ignora */ }
+    }, { once:true });
+
+    frame.src = 'rules.html';
+  }
+  openModal('rulesModal');
+}
+
+rulesBtn.addEventListener('click', () => {
+  openRulesModal();
+});
+
+
+
+    // Cerrar con botón [x] o clic fuera de la caja
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('[data-close]');
+      if (btn) { closeModal(btn.getAttribute('data-close')); return; }
+      if (e.target.classList && e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+      }
+    });
+    // 9) Share (igual)
+    shareBtn.addEventListener('click', async () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'ONE MILLION CHALLENGES',
+            text: '¡Estoy pintando píxeles! Entra a verlo:',
+            url: window.location.href
+          });
+        } catch (err) {
+          console.log('Error al compartir:', err);
+        }
+      } else {
+        alert('Tu navegador no soporta compartir.');
+      }
+    });
+
+    // 10) Pagar
+    const MAX_PER_ORDER = 25000; // nuevo límite
+
+paymentBtn.addEventListener('click', () => {
+  if (clicked.size === 0) { alert('Select at least one pixel before continuing.'); return; }
+  if (clicked.size > MAX_PER_ORDER) {
+    alert(`For performance, the maximum per purchase is ${MAX_PER_ORDER}. Please split it into multiple purchases.`);
+    return;
+  }
+      const selected = Array.from(clicked);
+      localStorage.setItem('selectedPixels', JSON.stringify(selected));
+      const url = `checkout.html?pixels=${selected.length}`;
+      window.open(
+        url,
+        'paypal_checkout',
+        'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=500,height=700'
+      );
+    });
+
+    // 11) Editar
+    editBtn.addEventListener('click', () => {
+      if (clicked.size === 0) {
+        alert('Select at least one pixel before editing content.');
+        return;
+      }
+      const selected = Array.from(clicked);
+      localStorage.setItem('selectedPixels', JSON.stringify(selected));
+      window.open(
+  'editor.html?admin=0',
+  'pixel_editor',
+        'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=640,height=760'
+      );
+    });
+// 12) Lucky (random free pixels)
+luckyBtn.addEventListener('click', () => {
+  const v = prompt('How many pixels should I pick for you?', '1');
+  if (v === null) return;
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n) || n < 1){ alert('Enter a valid positive number.'); return; }
+  pickRandomAvailable(n);
+});
+
+    // ====== PREVISUALIZACIÓN DEL EDITOR (overlayCanvas) ======
+    let overlayDraft = null;   // { type: 'color'|'image'|'video'|'link', color|url|dataURL, box:{x,y,cols,rows} }
+        let overlayImg = null, overlayThumb = null;     // image y thumbnail de video
+
+        // === Helpers para "comprimir" la imagen y que quepa completa ===
+
+// Convierte los selectedIds a una matriz binaria dentro del bounding box
+function idsToMatrix(ids, gridSize){
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const pts = [];
+  for (const raw of ids){
+    const id = Number(raw); if(!Number.isFinite(id)) continue;
+    const x = id % gridSize, y = Math.floor(id / gridSize);
+    pts.push([x,y]);
+    if (x<minX) minX=x; if (y<minY) minY=y;
+    if (x>maxX) maxX=x; if (y>maxY) maxY=y;
+  }
+  const cols = (maxX - minX + 1) || 1;
+  const rows = (maxY - minY + 1) || 1;
+  const M = Array.from({length: rows}, () => Array(cols).fill(0));
+  for (const [x,y] of pts) M[y - minY][x - minX] = 1;
+  return { M, minX, minY };
+}
+
+// Mayor rectángulo de 1s (O(rows*cols))
+function largestRectangleOfOnes(M){
+  const rows = M.length, cols = M[0]?.length || 0;
+  const H = Array(cols).fill(0);
+  let best = { area:0, x:0, y:0, w:0, h:0 };
+
+  function maxRectInHistogram(h, baseRow){
+    const st = [];
+    for (let i=0; i<=h.length; i++){
+      const cur = (i< h.length) ? h[i] : 0;
+      let start = i;
+      while (st.length && st[st.length-1].h > cur){
+        const {h:hh, i:idx} = st.pop();
+        const w = i - idx;
+        const area = hh * w;
+        if (area > best.area){
+          best = { area, x: idx, y: baseRow - hh + 1, w, h: hh };
+        }
+        start = idx;
+      }
+      st.push({h:cur, i:start});
+    }
+  }
+
+  for (let r=0; r<rows; r++){
+    for (let c=0; c<cols; c++){
+      H[c] = M[r][c] ? H[c]+1 : 0;
+    }
+    maxRectInHistogram(H, r);
+  }
+  return best;
+}
+
+// Devuelve {x,y,w,h} del rectángulo máximo totalmente DENTRO de la selección
+function maxInternalRectFromIds(ids, gridSize){
+  if (!Array.isArray(ids) || !ids.length) return null;
+  const { M, minX, minY } = idsToMatrix(ids, gridSize);
+  const best = largestRectangleOfOnes(M);
+  if (best.area <= 0) return null;
+  return {
+    x: minX + best.x,
+    y: minY + best.y,
+    w: best.w,
+    h: best.h
+  };
+}
+
+
+    function drawOverlay() {
+      // Limpia overlay
+      octx.setTransform(1,0,0,1,0,0);
+      octx.clearRect(0,0,overlay.width, overlay.height);
+
+      if (!overlayDraft || !overlayDraft.box) return;
+      const { x, y, cols, rows } = overlayDraft.box;
+      const w = cols, h = rows;
+
+      if (overlayDraft.type === 'color') {
+        octx.fillStyle = overlayDraft.color || '#34d399';
+        octx.globalAlpha = 0.85;
+        octx.fillRect(x, y, w, h);
+        octx.globalAlpha = 1;
+      } else if (overlayDraft.type === 'image' && overlayImg) {
+  const iw = overlayImg.naturalWidth  || 1;
+  const ih = overlayImg.naturalHeight || 1;
+
+  // --- BACKDROP: blurred cover (fills width & height without caring about crop)
+  {
+    const rBG  = Math.max(w / iw, h / ih); // cover
+    const dwBG = Math.ceil(iw * rBG);
+    const dhBG = Math.ceil(ih * rBG);
+    const dxBG = Math.round(x + (w - dwBG) / 2);
+    const dyBG = Math.round(y + (h - dhBG) / 2);
+
+    octx.save();
+    octx.beginPath(); octx.rect(x, y, w, h); octx.clip();
+    octx.filter = 'blur(18px) brightness(0.9)'; // ajusta el blur si quieres más/menos
+    octx.drawImage(overlayImg, dxBG, dyBG, dwBG, dhBG);
+    octx.filter = 'none';
+    octx.restore();
+  }
+
+  // --- FOREGROUND: main image as CONTAIN (no upscale, centered)
+  // Usa el rectángulo interno máximo si hay selección irregular
+let target = null;
+const ids = overlayDraft?.selectedIds || overlayDraft?.ids; // admite ambos
+if (Array.isArray(ids) && ids.length){
+  target = maxInternalRectFromIds(ids, gridSize);
+}
+if (!target) {
+  // fallback: el bounding box (x,y,w,h) si no hay ids
+  target = { x, y, w, h };
+}
+
+const tx = target.x, ty = target.y, tw = target.w, th = target.h;
+
+// contain dentro del rectángulo objetivo
+const srcW = overlayImg.naturalWidth  || overlayImg.width;
+const srcH = overlayImg.naturalHeight || overlayImg.height;
+const s  = Math.min(tw / srcW, th / srcH, 1);
+const dw = Math.max(1, Math.round(srcW * s));
+const dh = Math.max(1, Math.round(srcH * s));
+const dx = Math.round(tx + (tw - dw) / 2);
+const dy = Math.round(ty + (th - dh) / 2);
+
+// pintar sin clip (ya no hace falta porque dw×dh cabe dentro de target)
+octx.save();
+octx.imageSmoothingEnabled = true;
+octx.imageSmoothingQuality = 'high';
+octx.drawImage(overlayImg, dx, dy, dw, dh);
+octx.restore();
+
+
+  // border
+  octx.strokeStyle = 'rgba(0,0,0,0.35)';
+  octx.lineWidth = 1;
+  octx.strokeRect(x, y, w, h);
+
+   } else if (overlayDraft.type === 'video') {
+  if (overlayThumb) {
+    const iw = overlayThumb.naturalWidth  || 1;
+    const ih = overlayThumb.naturalHeight || 1;
+
+    // --- BACKDROP: blurred cover
+    {
+      const rBG  = Math.max(w / iw, h / ih);
+      const dwBG = Math.ceil(iw * rBG);
+      const dhBG = Math.ceil(ih * rBG);
+      const dxBG = Math.round(x + (w - dwBG) / 2);
+      const dyBG = Math.round(y + (h - dhBG) / 2);
+
+      octx.save();
+      octx.beginPath(); octx.rect(x, y, w, h); octx.clip();
+      octx.filter = 'blur(18px) brightness(0.9)';
+      octx.drawImage(overlayThumb, dxBG, dyBG, dwBG, dhBG);
+      octx.filter = 'none';
+      octx.restore();
+    }
+
+    // --- FOREGROUND: thumbnail as CONTAIN (no upscale)
+    // Usa el rectángulo interno máximo si hay selección irregular
+let target = null;
+const ids = overlayDraft?.selectedIds || overlayDraft?.ids;
+if (Array.isArray(ids) && ids.length){
+  target = maxInternalRectFromIds(ids, gridSize);
+}
+if (!target) target = { x, y, w, h };
+
+const tx = target.x, ty = target.y, tw = target.w, th = target.h;
+
+const srcW = overlayThumb.naturalWidth  || overlayThumb.width;
+const srcH = overlayThumb.naturalHeight || overlayThumb.height;
+const s  = Math.min(tw / srcW, th / srcH, 1);
+const dw = Math.max(1, Math.round(srcW * s));
+const dh = Math.max(1, Math.round(srcH * s));
+const dx = Math.round(tx + (tw - dw) / 2);
+const dy = Math.round(ty + (th - dh) / 2);
+
+octx.save();
+octx.imageSmoothingEnabled = true;
+octx.imageSmoothingQuality = 'high';
+octx.drawImage(overlayThumb, dx, dy, dw, dh);
+octx.restore();
+
+
+    octx.strokeStyle = 'rgba(0,0,0,0.35)';
+    octx.lineWidth = 1;
+    octx.strokeRect(x, y, w, h);
+
+        } else {
+          // placeholder si aún no hay thumbnail
+          octx.fillStyle = 'rgba(20,20,20,0.7)'; octx.fillRect(x,y,w,h);
+          octx.fillStyle = 'rgba(255,255,255,0.9)';
+          const t = Math.min(w,h)*0.25;
+          octx.beginPath();
+          octx.moveTo(x + w*0.45 - t*0.5, y + h*0.5 - t);
+          octx.lineTo(x + w*0.45 - t*0.5, y + h*0.5 + t);
+          octx.lineTo(x + w*0.45 + t,     y + h*0.5);
+          octx.closePath(); octx.fill();
+        }
+
+      } else if (overlayDraft.type === 'link') {
+        octx.fillStyle = 'rgba(46,164,79,0.25)'; octx.fillRect(x,y,w,h);
+        octx.strokeStyle = 'rgba(46,164,79,0.9)'; octx.lineWidth = 2; octx.strokeRect(x,y,w,h);
+      }
+            // Indicador de link
+      if (overlayDraft && overlayDraft.link){
+        octx.fillStyle = 'rgba(46,164,79,0.9)';
+        octx.font = 'bold 8px sans-serif';
+        octx.fillText('🔗', x + w - 10, y + 10);
+      }
+    }
+
+    function loadOverlayFromStorage() {
+      try { overlayDraft = JSON.parse(localStorage.getItem('overlayDraft') || 'null'); }
+      catch { overlayDraft = null; }
+      overlayImg = null;
+      overlayThumb = null;
+            if (overlayDraft && overlayDraft.type === 'image') {
+        overlayImg = new Image(); overlayImg.crossOrigin = 'anonymous';
+        overlayImg.onload = drawOverlay;
+        overlayImg.onerror = drawOverlay;
+        overlayImg.src = overlayDraft.dataURL || overlayDraft.url;
+      } else if (overlayDraft && overlayDraft.type === 'video' && overlayDraft.thumbnail) {
+        overlayThumb = new Image(); overlayThumb.crossOrigin = 'anonymous';
+        overlayThumb.onload = drawOverlay;
+        overlayThumb.onerror = drawOverlay;
+        overlayThumb.src = overlayDraft.thumbnail;
+      } else {
+        drawOverlay();
+      }
+    }
+    // Reaccionar cuando el editor guarda/limpia
+    window.addEventListener('focus', loadOverlayFromStorage);
+    window.addEventListener('storage', (e)=>{ if(e.key === 'overlayDraft') loadOverlayFromStorage(); });
+    window.addEventListener('message', (e)=>{ if (e?.data?.type?.startsWith('overlayDraft')) loadOverlayFromStorage(); });
+
+// --- Recargar el grid cuando hay pago confirmado o se vuelve a foco ---
+window.addEventListener('focus', () => { loadTakenAndPaint(); });
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'overlayDraft_paid') { loadTakenAndPaint(); }
+});
+
+window.addEventListener('message', (e) => {
+  if (e?.data?.type === 'orderPaid') { loadTakenAndPaint(); }
+});
+
+
+    // Inicial
+    updateCounter();
+    loadOverlayFromStorage(); // muestra previsualización si ya existe
+
+
+  // Opcional: abrir link si se hace click sobre un overlay con link
+  function pointInBox(px, py, box){
+    return px >= box.x && px < box.x + box.cols && py >= box.y && py < box.y + box.rows;
+  }
+  canvas.addEventListener('click', (ev)=>{
+    try{
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const gx = Math.floor((ev.clientX - rect.left) * scaleX);
+      const gy = Math.floor((ev.clientY - rect.top)  * scaleY);
+
+      for (const ov of loadedOverlays){
+        if (ov.link && ov.box && pointInBox(gx, gy, ov.box)){
+          window.open(ov.link, '_blank');
+          ev.preventDefault();
+          ev.stopPropagation();
+          return;
+        }
+      }
+    }catch{}
+  }, true);
+
+ (async ()=>{
+  await loadTakenAndPaint();
+})();
+
+
+  </script>
+<!-- Modal: Dare Me -->
+<!-- Modal: Info -->
+<div id="infoModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+  <div class="box vibe">
+    <button class="close" data-close="infoModal">×</button>
+
+    <h2 id="infoTitle" style="margin:0 0 6px;">
+      Claim your square. Make some noise.
+    </h2>
+    <p style="margin:0 0 8px;">
+      <p style="margin:0 0 8px;">
+      You’re buying <b>space</b> on a massive pixel mural.
+      Your square is your tiny billboard: drop an image, point to a link, splash a bold color… or
+      <i>optionally</i> tag it with a dare you want to see happen.
+    </p>
+
+    <h3 style="margin:10px 0 6px;">Two ways to play</h3>
+    <ul>
+      <li><b>Just place content</b>: upload an image, add a link, or do both. Simple. Visible. Shareable.</li>
+      <li><b>You’ll write it during checkout </b>: add a dare in your square’s text/link so I can make it real and post proof.</li>
+    </ul>
+
+    <h3 style="margin:10px 0 6px;">How it works</h3>
+    <ol style="margin:0 0 8px 20px;">
+      <li><b>Claim</b> one or more squares on the canvas.</li>
+      <li><b>Design</b> your square: image, color block, link, or both (link + image).</li>
+      <li><b>Optional</b>: write a dare in your message or link to full details.</li>
+      <li><b>Pay to lock</b> your squares — they become yours.</li>
+      <li><b>Share</b> your spot and watch the mural evolve.</li>
+    </ol>
+
+    <h3 style="margin:10px 0 6px;">Size vibes</h3>
+    <div class="tier-grid">
+      <div class="tier"><b>Mini square ($1–$5)</b> Pop of color, tiny message, quick link.</div>
+      <div class="tier"><b>Creator square ($10–$20)</b> Clear image + link, easy to spot.</div>
+      <div class="tier"><b>Mega block ($30–$50)</b> Bigger area, louder visuals, more clicks.</div>
+      <div class="tier"><b>Epic block ($100+)</b> Dominant area, statement piece, hero link.</div>
+    </div>
+
+    <h3 style="margin:10px 0 6px;">Ground rules</h3>
+    <ul>
+      <li>Keep it safe & legal. No harm or damage.</li>
+      <li>No hate, politics, or harassment.</li>
+      <li>Images/links must be SFW and doable to host.</li>
+      <li>If you add a dare, I’ll only accept realistic ones and I’ll post proof.</li>
+    </ul>
+
+    <h3 style="margin:10px 0 6px;">Make it spread</h3>
+    <ul>
+      <li>Use bold colors and short text on the image.</li>
+      <li>Point your link to something visual (video, gallery, landing).</li>
+      <li>Team up: multiple adjacent squares = one big story.</li>
+    </ul>
+
+    <div class="cta-row">
+      <a class="cta" href="#" onclick="document.querySelector('#infoModal .close').click();">Claim my square</a>
+    </div>
+
+    <p style="margin-top:8px;"><small>
+      Tip: Image + link wins. Add a short caption on the image and point the link to the full story.
+    </small></p>
+  </div>
+</div>
+
+  <!-- Modal: Contact us -->
+<div id="contactModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="contactTitle">
+  <div class="box contact-card">
+    <button class="close" data-close="contactModal">×</button>
+
+    <h2 id="contactTitle" class="contact-title">Let’s talk</h2>
+    <p class="contact-sub">Claim your square, ask anything, or pitch a wild idea.</p>
+
+    <div class="contact-list">
+      <!-- WhatsApp -->
+      <a class="contact-item whatsapp" href="https://wa.me/593982396146" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M20.52 3.48A11.9 11.9 0 0 0 12.06 0C5.48 0 .12 5.36.12 11.95c0 2.1.55 4.15 1.6 5.97L0 24l6.22-1.64a12 12 0 0 0 5.84 1.5h.01c6.58 0 11.94-5.36 11.94-11.95 0-3.19-1.24-6.19-3.49-8.43zM12.06 22a9.9 9.9 0 0 1-5.04-1.38l-.36-.21-3.69.98.99-3.6-.24-.37A9.94 9.94 0 1 1 22 12.06C22 17.52 17.52 22 12.06 22zm5.64-7.45c-.31-.15-1.84-.9-2.13-1-.29-.11-.5-.15-.71.15-.21.31-.81.99-1 1.2-.19.21-.37.23-.69.08-.31-.15-1.31-.48-2.49-1.53-.92-.82-1.54-1.83-1.72-2.14-.18-.31-.02-.48.13-.63.14-.14.31-.36.46-.54.16-.18.21-.31.31-.52.1-.21.05-.39-.03-.54-.08-.15-.71-1.7-.98-2.33-.26-.63-.52-.54-.71-.55h-.6c-.2 0-.52.08-.79.39-.27.31-1.04 1.02-1.04 2.49s1.07 2.89 1.22 3.09c.15.21 2.11 3.22 5.11 4.52.71.31 1.26.49 1.69.63.71.22 1.36.19 1.87.11.57-.08 1.84-.75 2.1-1.47.26-.72.26-1.34.18-1.47-.07-.13-.28-.21-.59-.36z"/>
+          </svg>
+        </span>
+        <span class="text">
+          <b>WhatsApp</b>
+          <small>+593 98 239 6146</small>
+        </span>
+      </a>
+      
+      <!-- Email -->
+      <a class="contact-item email" href="https://mail.google.com/mail/?view=cm&fs=1&to=onemillionchanges@gmail.com" target="_blank" rel="noopener" aria-label="Compose email in Gmail">
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 2v.01L12 11 4 6.01V6h16ZM4 18V8l8 5 8-5v10H4Z"/>
+          </svg>
+        </span>
+        <span class="text">
+          <b>Email</b>
+          <small>onemillionchanges@gmail.com</small>
+        </span>
+      </a>
+            <!-- Facebook -->
+      <a class="contact-item facebook" href="https://www.facebook.com/khriztofer.martinez.7/" target="_blank" rel="noopener" aria-label="Open Facebook profile">
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M22 12.06C22 6.48 17.52 2 11.94 2S2 6.48 2 12.06c0 4.99 3.66 9.13 8.44 9.94v-7.03H7.9v-2.9h2.54V9.84c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.87h2.78l-.44 2.9h-2.34V22c4.78-.81 8.44-4.95 8.44-9.94Z"/>
+          </svg>
+        </span>
+        <span class="text">
+          <b>Facebook</b>
+          <small>/khriztofer.martinez.7</small>
+        </span>
+      </a>
+    </div>
+  </div>
+</div>
+<!-- Modal: Rules -->
+<div id="rulesModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="box rules-box">
+    <button class="close" data-close="rulesModal">×</button>
+    <!-- Mostramos rules.html dentro del modal -->
+    <iframe id="rulesFrame" src="about:blank" loading="lazy" title="Rules"></iframe>
+    
+  </div>
+</div>
+
+
+    <div id="overlayMenu" style="position:absolute; display:none; z-index:10; background:#111; color:#eee; border:1px solid #333; border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,.35);"></div>
+</body>
+</html>
